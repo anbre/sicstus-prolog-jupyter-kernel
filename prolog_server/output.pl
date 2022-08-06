@@ -123,7 +123,7 @@ redirect_output_to_file :-
   % Set the stdout stream to which the goal's output is output by default
   tell(OutputStream),
   % Set the stderr stream to which debugging messages are output
-  set_prolog_flag(user_error, OutputStream).
+  redirect_user_error_output_to_stream(OutputStream).
 
 
 assert_query_start_time :-
@@ -160,6 +160,9 @@ switch_debug_mode_on_for_breakpoints.
 
 
 % assert_query_data(+CallRequestId, +TermData, +OriginalTermData)
+assert_query_data(0, _TermData, _OriginalTermData) :- !.
+% Do not assert query data for requests with ID 0
+% With requests with this ID, the kernel can request additional data (e.g. for inspection in the case of SWI-Prolog)
 assert_query_data(CallRequestId, TermData, OriginalTermData) :-
   statistics(walltime, [EndTime|_]),
   nonvar(OriginalTermData),

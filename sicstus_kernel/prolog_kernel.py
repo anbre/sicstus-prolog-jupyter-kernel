@@ -19,7 +19,6 @@ from IPython.core.completer import CompletionSplitter
 # Enable logging
 logging.basicConfig(level=logging.DEBUG,
                     format='[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s')
-logger = logging.getLogger()
 
 output_text_style = """
 font-family: Menlo, Consolas, 'DejaVu Sans Mono', monospace;
@@ -36,6 +35,7 @@ class PrologBaseKernel(Kernel):
         'codemirror_mode': 'prolog',
     }
 
+    logger = logging.getLogger()
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -57,7 +57,7 @@ class PrologBaseKernel(Kernel):
 
     def handle_interrupt(self):
         # Interrupting the kernel interrupts the Prolog process, so it needs to be restarted
-        logger.debug('Kernel interrupted')
+        self.logger.debug('Kernel interrupted')
         self.kill_prolog_server()
 
 
@@ -78,7 +78,7 @@ class PrologBaseKernel(Kernel):
             )
             self.is_server_restart_required = False
         else:
-            logger.debug('The file ' + self.pl_path + ' could not be found in ' + os.getcwd(), exc_info=True)
+            self.logger.debug('The file ' + self.pl_path + ' could not be found in ' + os.getcwd(), exc_info=True)
 
 
     def kill_prolog_server(self):
@@ -86,7 +86,7 @@ class PrologBaseKernel(Kernel):
         Kills the prolog server process if it is still running.
         """
         if self.prolog_proc is not None:
-            logger.debug('Kill Prolog server')
+            self.logger.debug('Kill Prolog server')
             self.prolog_proc.kill()
             self.is_server_restart_required = True
 
@@ -112,14 +112,8 @@ class PrologBaseKernel(Kernel):
             jupyter_predicate_docs_dict = self.server_request(0, 'jupyter_predicate_docs')
             self.jupyter_predicate_docs = jupyter_predicate_docs_dict["result"]
 
-            self.predicate_inspection_data = self.get_predicate_inspection_data()
         except Exception as exception:
-            logger.error(exception, exc_info=True)
-
-
-    def get_predicate_inspection_data(self):
-        """In case any inspection data can be provided in addition to the docs from the predicates from module jupyter, this should be overriden"""
-        return self.jupyter_predicate_docs
+            self.logger.error(exception, exc_info=True)
 
 
     # Overriden kernel methods
@@ -132,13 +126,13 @@ class PrologBaseKernel(Kernel):
 
         If the execution is interrupted or an exception occurs, an error response is sent to the frontend.
         """
-        logger.debug('code: ' + code)
+        self.logger.debug('code: ' + code)
 
         if not silent:
             try:
                 # Check if the server had been shutdown (because of 'halt', an interrupt, or an exception) and a server restart is necessary
                 if self.is_server_restart_required:
-                    logger.debug('Restart Prolog server')
+                    self.logger.debug('Restart Prolog server')
                     self.start_prolog_server()
                     self.send_response_display_data(self.informational_prefix + 'The Prolog server was restarted', "color:red")
 
@@ -154,12 +148,12 @@ class PrologBaseKernel(Kernel):
                 self.handle_interrupt()
                 return {'status': 'error', 'ename' : 'interrupt', 'evalue' : '', 'traceback' : ''}
             except BrokenPipeError:
-                logger.error(self.error_prefix + 'Broken pipe\n' + self.error_prefix + 'The Prolog server needs to be restarted', "color:red")
+                self.logger.error(self.error_prefix + 'Broken pipe\n' + self.error_prefix + 'The Prolog server needs to be restarted', "color:red")
                 self.is_server_restart_required = True
                 self.send_response_display_data(self.error_prefix + 'Something went wrong\n' + self.error_prefix + 'The Prolog server needs to be restarted\n', "color:red")
                 return {'status': 'error', 'ename' : 'broken pipe', 'evalue' : '', 'traceback' : ''}
             except Exception as exception:
-                logger.error(exception, exc_info=True)
+                self.logger.error(exception, exc_info=True)
                 self.is_server_restart_required = True
                 self.send_response_display_data(self.error_prefix + 'Something went wrong\n' + self.error_prefix + 'The Prolog server needs to be restarted\n', "color:red")
                 return {'status': 'error', 'ename' : 'exception', 'evalue' : '', 'traceback' : ''}
@@ -196,12 +190,12 @@ class PrologBaseKernel(Kernel):
 
         # Read the JSON-RCP Response object (http://www.jsonrpc.org/specification#response_object)
         response_string = self.prolog_proc.stdout.readline()
-        logger.debug('response: ' + response_string)
+        self.logger.debug('response: ' + response_string)
 
         try:
             return json.loads(response_string)
         except json.decoder.JSONDecodeError as exception:
-            logger.debug('The Response object is no valid JSON object')
+            self.logger.debug('The Response object is no valid JSON object')
             raise
 
 
@@ -357,7 +351,7 @@ class PrologBaseKernel(Kernel):
 
         error = response_dict["error"]
         error_code = error['code']
-        logger.debug('error code: ' + str(error_code))
+        self.logger.debug('error code: ' + str(error_code))
 
         if error['data']:
             self.handle_additional_data(error['data'])
@@ -538,38 +532,45 @@ class PrologBaseKernel(Kernel):
 
 
     def do_inspect(self, code, cursor_pos, detail_level=0, omit_sections=()):
+        """
+        Inspection is supported for the predicates from module jupyter.
+        By overriding this method, inspection for further predicates can be implemented.
+        """
+        token, data = self.get_token_and_jupyter_predicate_inspection_data(code, cursor_pos)
+
+        if data == {}:
+            found = False
+        else:
+            found = True
+
+        return {'status': 'ok', 'data': data, 'metadata': {}, 'found': found}
+
+
+    def get_token_and_jupyter_predicate_inspection_data(self, code, cursor_pos):
         token = self.get_current_token(self.inspection_splitter, code, cursor_pos)
-        logger.debug('token: ' + token)
 
         if not token:
             # There is no token which can be inspected
-            return {'status': 'ok', 'data': {}, 'metadata': {}, 'found': False}
-
-        # If the links could not be retrieved when starting the kernel, try reading them again
-        if self.predicate_inspection_data is None:
-            self.predicate_inspection_data = self.get_predicate_inspection_data()
-            if self.predicate_inspection_data is None:
-                return {'status': 'ok', 'data': {}, 'metadata': {}, 'found': False}
-
-        # Find the matching predicates
-        # If a key of the dictionary contains the current token, the element is assumed to match
-        matching_predicate_data = {pred:self.predicate_inspection_data[pred] for pred in self.predicate_inspection_data if (token in pred)}
-
-        if len(matching_predicate_data) == 0:
-            return {'status': 'ok', 'data': {}, 'metadata': {}, 'found': False}
+            data = {}
         else:
-            data_txt = ""
-            data_md = ""
-            for pred, data in matching_predicate_data.items():
-                if isinstance(data, list):
-                    for link_dict in data:
-                        data_txt += '\x1b[0;1m' + link_dict['link_text'] + ':\n\x1b[0;34m' + link_dict['link'] + '\n\n'
-                        data_md += '<p><a href="' + link_dict['link'] + '">' + link_dict['link_text'] + '</a></p>'
-                else:
-                    data_txt += '\x1b[0;1m' + pred + ':\n\x1b[0m' + data + '\n\n'
-                    data_md += '<p><b>' + pred + ':</b><br>' + data.replace('\n', '<br>').replace('$', '\$') + '</p>'
+            # Find all matching predicate inspection data
+            # If a key of the dictionary contains the current token, the element is assumed to match
+            matching_predicate_data = {pred:self.jupyter_predicate_docs[pred] for pred in self.jupyter_predicate_docs if (token in pred)}
 
-            return {'status': 'ok', 'data': {'text/plain': data_txt, 'text/markdown': data_md}, 'metadata': {}, 'found': True}
+            if len(matching_predicate_data) == 0:
+                # There is no matching predicate
+                data = {}
+            else:
+                 # Compute plain text and markdown output for the matching predicate data
+                jupyter_docs_plain = ''
+                jupyter_docs_md = ''
+                for pred, data in matching_predicate_data.items():
+                    jupyter_docs_plain += data + '\n\n'
+                    jupyter_docs_md += '<pre>' + data.replace('\n', '<br>').replace('$', '&#36;') + '<br><br></pre>'
+
+                data = {'text/plain': jupyter_docs_plain, 'text/markdown': jupyter_docs_md}
+
+        return token, data
 
 
     def get_current_token(self, splitter, code, cursor_pos):

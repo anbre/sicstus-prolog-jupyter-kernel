@@ -1070,19 +1070,19 @@ test(breakpoint_and_trace, [true(Call3Result = ExpectedCall3Result)]) :-
   check_equality(TraceResult, ExpectedTraceResult),
   % Since there is a breakpoint, after the jupyter:trace/1 call, debug mode is still on and debugging messages are printed
   Call2Request = 'app([1], [2], [1,2]).',
-  ExpectedCall2Result = [type=query,bindings=json([]),output=' *   3367     13 Call: ^1 [1]\n *   3368     14 Call: ^1 []\n *   3368     14 Exit: ^1 []\n *   3367     13 Exit: ^1 [1]'],
+  ExpectedCall2Result = [type=query,bindings=json([]),output=' *   3368     13 Call: ^1 [1]\n *   3369     14 Call: ^1 []\n *   3369     14 Exit: ^1 []\n *   3368     13 Exit: ^1 [1]'],
   send_call_with_single_success_result(Call2Request, 10, Call2Result),
   check_equality(Call2Result, ExpectedCall2Result),
   % After an exception, debug mode is still on and debugging messages are printed
   ExceptionRequest = 'jupyter:trace((3 is 1 + x)).',
-  ExpectedExceptionOutput = '     5394     22 Exit: trace\n     5395     22 Call: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5395     22 Exception: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5392     21 Exception: jupyter:trace(3 is 1+x)\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5391     20 Exception: call(jupyter:trace(3 is 1+x))',
+  ExpectedExceptionOutput = '     5396     22 Exit: trace\n     5397     22 Call: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5397     22 Exception: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5394     21 Exception: jupyter:trace(3 is 1+x)\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5393     20 Exception: call(jupyter:trace(3 is 1+x))',
   ExpectedErrorInfo = '! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x',
   Error = json([code= -4712,message='Exception',data=json([error_info=ErrorInfo, output=ExceptionOutput])]),
   send_call_with_single_error_result(ExceptionRequest, 11, Error),
   check_equality(ExceptionOutput, ExpectedExceptionOutput),
   check_equality(ErrorInfo, ExpectedErrorInfo),
   Call3Request = 'app([1], [2], [1,2]).',
-  ExpectedCall3Result = [type=query,bindings=json([]),output=' *  10511     22 Call: ^1 [1]\n *  10512     23 Call: ^1 []\n *  10512     23 Exit: ^1 []\n *  10511     22 Exit: ^1 [1]'],
+  ExpectedCall3Result = [type=query,bindings=json([]),output=' *  10514     22 Call: ^1 [1]\n *  10515     23 Call: ^1 []\n *  10515     23 Exit: ^1 []\n *  10514     22 Exit: ^1 [1]'],
   send_call_with_single_success_result(Call3Request, 12, Call3Result).
 
 :- endif.
@@ -1280,7 +1280,7 @@ test(print_table_2_no_single_goal, [true(ErrorInfoSubterm = ExpectedErrorInfoSub
 
 test(previous_query_time_no_previous_query, [true(Error = ExpectedError)]) :-
   Request = 'jupyter:previous_query_time(Goal, Time).',
-  ExpectedError = json([code= -4711,message='Failure',data=json([error_info=''])]),
+  ExpectedError = json([code= -4711,message='Failure',data=json([error_info='',output='* There is no previous query'])]),
   send_call_with_single_error_result(Request, 1, Error).
 
 test(previous_query_time_member, [true(LastQueryTimeResult = ExpectedLastQueryTimeResult)]) :-

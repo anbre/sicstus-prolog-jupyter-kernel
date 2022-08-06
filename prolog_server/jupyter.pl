@@ -86,74 +86,93 @@ print_pred_docs([_Pred=Doc|PredDocs]) :-
 predicate_doc('jupyter:help/0', Doc) :-
   atom_concat([
     'jupyter:help',
-    '\n\nOutputs the documentation for all predicates defined in module jupyter.'
+    '\n\n    Outputs the documentation for all predicates from module jupyter.'
   ], Doc).
 predicate_doc('jupyter:halt/0', Doc) :-
   atom_concat([
-    'jupyter:halt or halt (can be called with or without module name expansion)',
-    '\n\nShuts down the running Prolog process. The next time code is to be executed, a new process is started and everything defined in the database before does not exist anymore.',
-    '\n\nCorresponds to the functionality of halt/0. Has the same effect as interrupting or restarting the Jupyter kernel.'
+    'jupyter:halt or halt',
+    '\n\n    Shuts down the running Prolog process.',
+    '\n\n    The next time code is to be executed, a new process is started.',
+    '\n    Everything defined in the database before does not exist anymore.',
+    '\n\n    Corresponds to the functionality of halt/0.',
+    '\n    Has the same effect as interrupting or restarting the Jupyter kernel.'
   ], Doc).
 predicate_doc('jupyter:retry/0', Doc) :-
   atom_concat([
-    'jupyter:retry or retry (can be called with or without module name expansion)',
-    '\n\nCauses backtracking of the latest active query.',
-    '\n\nA query is active as long as retrying it did not detect that there are no further solutions or the choicepoints have been cut off with jupyter:cut/0.',
-    '\n\nNeeds to be the only goal of a query.'
+    'jupyter:retry or retry',
+    '\n\n    Causes backtracking of the latest active query.',
+    '\n\n    In general, the previous query is the active one.',
+    '\n    However, the previous active query can be activated again.',
+    '\n    This can be done by cutting off choicepoints with jupyter:cut/0.',
+    '\n    This is also the case if a retry/0 encounters no further solutions.',
+    '\n\n    Needs to be the only goal of a query.'
   ], Doc).
 predicate_doc('jupyter:cut/0', Doc) :-
   atom_concat([
-    'jupyter:cut or cut (can be called with or without module name expansion)',
-    '\n\nCuts off the choicepoints of the latest active query.',
-    '\n\nA query is active as long as retrying it did not detect that there are no further solutions or the choicepoints have been cut off.',
-    '\nA further call of jupyter:retry/0 causes backtracking of the previous active goal.',
-    '\n\nNeeds to be the only goal of a query.'
+    'jupyter:cut or cut',
+    '\n\n    Cuts off the choicepoints of the latest active query.',
+    '\n\n    In general, the previous query is the active one.',
+    '\n    However, the previous active query can be activated again.',
+    '\n    This can be done by cutting off choicepoints with jupyter:cut/0.',
+    '\n    This is also the case if a retry/0 encounters no further solutions.',
+    '\n\n    A further retry/0 call causes backtracking of the previous active goal.',
+    '\n\n    Needs to be the only goal of a query.'
   ], Doc).
 predicate_doc('jupyter:trace/1', Doc) :-
   atom_concat([
     'jupyter:trace(+Goal)',
-    '\n\nPrints the trace of the goal Goal.',
-    '\n\nSwitches on trace mode, calls the goal Goal and switches off trace mode.',
-    'By default, all ports are unleashed so that no user interaction is requested.',
-    'All previously set breakpoints are still active.',
-    '\n\nNeeds to be the only goal of a query in order to work as expected.'
+    '\n\n    Prints the trace of the goal Goal.',
+    '\n    By default, no port is leashed so that no user interaction is requested.',
+    '\n    All previously set breakpoints are still active.',
+    '\n\n    Needs to be the only goal of a query in order to work as expected.'
   ], Doc).
 predicate_doc('jupyter:print_variable_bindings', Doc) :-
   atom_concat([
     'jupyter:print_variable_bindings',
-    '\n\nPrints variable bindings from previous queries. For each variable the latest value it was bound to is shown.',
-    '\n\nThe variable value can be accessed with a $Var term by any query. In that case, the term is replaced by the value. If there is no previous value, an error message is printed.'
+    '\n\n    Prints variable bindings from previous queries.',
+    '\n    For each variable, the latest value it was bound to is shown.',
+    '\n\n    The variable value can be accessed with a $Var term by any query.',
+    '\n    In that case, the term is replaced by the value.',
+    '\n    If there is no previous value, an error message is printed.'
   ], Doc).
 predicate_doc('jupyter:print_table/1', Doc) :-
   atom_concat([
     'jupyter:print_table(+Goal)',
-    '\n\nComputes all results of the goal Goal with findall/3 and prints them in a table.',
-    '\n\nNeeds to be the only goal of a query.',
-    '\n\nExample: jupyter:print_table(prolog_flag(FlagName, Value)).'
+    '\n\n    Computes all results of the goal Goal with findall/3.',
+    '\n    These are printed in a table.',
+    '\n\n    Needs to be the only goal of a query.',
+    '\n\n    Example: jupyter:print_table(prolog_flag(FlagName, Value)).'
   ], Doc).
 predicate_doc('jupyter:print_table/2', Doc) :-
   atom_concat([
     'jupyter:print_table(+ValuesLists, +VariableNames)',
-    '\n\nPrints a table of the values in ValuesLists.',
-    '\n\nValuesLists is a list of lists of the same length. Each list corresponds to one line of the table.',
-    '\nThe header of the table is filled with the elements in VariableNames if it is a list of ground terms of the same length as the values lists.',
-    '\nIf VariableNames is bound to [], capital letters are used for the header instead.',
-    '\n\nNeeds to be the only goal of a query.',
-    '\n\nCan be used with a predicate like findall/3, but not directly. Instead, the binding of a previous query can be accessed with a $Var term (see jupyter:print_variable_bindings/0).',
-    '\n\nExamples:',
-    '\n  jupyter:print_table([[10,100],[20,400],[30,900]], [\'X\', \'Y\']).',
-    '\n  jupyter:print_table($ResultLists, []).'
+    '\n\n    Prints a table of the values in ValuesLists.',
+    '\n\n    ValuesLists is a list of lists of the same length.',
+    '\n    Each list corresponds to one line of the table.',
+    '\n\n    VariableNames is used to fill the header of the table.',
+    '\n    If VariableNames=[], capital letters are used.',
+    '\n    Otherwise, VariableNames needs to be a list of ground terms.',
+    '\n    It needs to be of the same length as the values lists.',
+    '\n\n    Needs to be the only goal of a query.',
+    '\n\n    Can be used with a predicate like findall/3, but not directly.',
+    '\n    Instead, a previous binding can be accessed with a $Var term.',
+    '\n\n    Examples:',
+    '\n        jupyter:print_table([[10,100],[20,400],[30,900]], [\'X\', \'Y\']).',
+    '\n        jupyter:print_table($ResultLists, []).'
   ], Doc).
 predicate_doc('jupyter:previous_query_time/2', Doc) :-
   atom_concat([
     'jupyter:previous_query_time(-Goal, -Runtime)',
-    '\n\nGoal is the previously executed goal and Time is the time in milliseconds it took the query to complete.'
+    '\n\n    Goal is the previously executed goal.',
+    '\n    Time is the time in milliseconds it took the query to complete.'
   ], Doc).
 predicate_doc('jupyter:print_previous_queries/1', Doc) :-
   atom_concat([
     'jupyter:print_previous_queries(+Ids)',
-    '\n\nThe previous queries which were exectued in requests with IDs in Ids are printed in a way that they can be copied to a cell and executed right away or expanded with a head to define a predicate.',
-    '\n\nIf one of the queries contains a $Var term and a previous query with id in Ids contains the variable Var, the term is replaced by the variable name. Otherwise, $Var is not replaced.'
+    '\n\n    Prints previous queries which were exectued in requests with IDs in Ids.',
+    '\n\n    Any $Var terms might be replaced by the variable\'s name.',
+    '\n    This is the case if a previous query with ID in Ids contains Var.',
+    '\n    Otherwise, $Var is not replaced.'
   ], Doc).
 
 
@@ -277,8 +296,10 @@ print_variable_bindings([Name=Value|Bindings]) :-
 % Runtime is the runtime of the latest query, which was a call of Goal
 previous_query_time(Goal, Runtime) :-
   findall(Goal-Runtime, output:query_data(_CallRequestId, Runtime, term_data(Goal, _NameVarPairs), _OriginalTermData), GoalRuntimes),
-  log(GoalRuntimes),
   append(_PreviousGoalRuntimes, [Goal-Runtime], GoalRuntimes).
+previous_query_time(_Goal, _Runtime) :-
+  format('* There is no previous query', []),
+  fail.
 
 
 % print_previous_queries(+Ids)
