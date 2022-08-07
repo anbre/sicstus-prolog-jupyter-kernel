@@ -307,11 +307,14 @@ atom_without_processed_term_chars(TermsAtom, TermPos, Comments, RemainingTermsAt
 
 % term_length(+TermPos, -Length)
 %
-% TermPos is the layout information of a term.
-% It is either "From-To" for an atom or "term_position(From, To, FFrom, FTo, SubPos)" for a compound term.
-% Length the length of the term.
+% TermPos is the layout information of a term, which is one of:
+% - From-To for an atom
+% - term_position(From, To, FFrom, FTo, SubPos) for a compound term
+% - list_position(From, To, Elms, Tail) for a list (e.g. when consulting a file)
+% Length is the length of the term.
 term_length(_From-To, To) :- !.
 term_length(term_position(_From, To, _FFrom, _FTo, _SubPos), To).
+term_length(list_position(_From, To, _Elms, _Tail), To).
 
 
 % next_term_atom(+AtomWithoutProcessedTerm, +TermLength, +Comments, -RemainingTermsAtom)

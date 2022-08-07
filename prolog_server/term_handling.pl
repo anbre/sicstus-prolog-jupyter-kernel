@@ -743,20 +743,11 @@ handle_begin_tests(Directive, Bindings) :-
 
 % handle_run_tests(+Term, +CallRequestId, +Stack, +Bindings, -Cont)
 %
-% Does the same as for any other query, but additionally sets the Prolog flag informational to on.
-% This needs to be done so that the test results are output.
-:- if(swi).
+% If in the current query tests were defined, the test definition file is loaded.
+% Afterwards, this is handled the same as any other query.
 handle_run_tests(Term, CallRequestId, Stack, Bindings, Cont) :-
   test_definition_end(true),
   handle_query(Term, false, CallRequestId, Stack, Bindings, _OriginalTermData, cut, Cont).
-:- else.
-handle_run_tests(Term, CallRequestId, Stack, Bindings, Cont) :-
-  test_definition_end(true),
-  prolog_flag(informational, InformationFlag),
-  set_prolog_flag(informational, on),
-  handle_query(Term, false, CallRequestId, Stack, Bindings, _OriginalTermData, cut, Cont),
-  set_prolog_flag(informational, InformationFlag).
-:- endif.
 
 
 % write_to_test_definition_stream(+Term, +Bindings)

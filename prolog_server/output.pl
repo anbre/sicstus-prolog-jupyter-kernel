@@ -12,7 +12,8 @@
 
 
 :- module(output,
-    [send_reply_on_error/0,
+    [remove_trace_debugging_messages/0,
+     send_reply_on_error/0,
      query_data/4,                      % query_data(-CallRequestId, -Runtime, -TermData, -OriginalTermData)
      call_with_output_to_file/3,        % call_with_output_to_file(+Goal, -Output, -ExceptionMessage)
      call_query_with_output_to_file/7,  % call_query_with_output_to_file(+Goal, +CallRequestId, +Bindings, +OriginalTermData, -Output, -ExceptionMessagem -IsFailure)
@@ -42,6 +43,7 @@ sicstus :- catch(current_prolog_flag(dialect, sicstus), _, fail).
 
 
 :- dynamic
+  remove_trace_debugging_messages/0,
   send_reply_on_error/0,
   output_stream/1, % output_stream(OutputStream)
   query_data/4. % query_data(CallRequestId, Runtime, TermData, OriginalTermData)
@@ -140,21 +142,27 @@ call_with_exception_handling(MGoal, ExceptionMessage) :-
         % In case of an exception, switch debug mode off so that no more debugging messages are printed
         (notrace, exception_message(Exception, ExceptionMessage))).
 :- else.
-call_with_exception_handling(MGoal, ExceptionMessage) :-
-  catch(call(MGoal),
+call_with_exception_handling(jupyter:trace(Goal), ExceptionMessage) :-
+  !,
+  % In case of a call of jupyter:trace/1, the debugger needs to switched off in case of an exception
+  % Since in this case, the message "% The debugger is switched off" is output, this is not done for all goals
+  % The message is removed from the output before sending it to the client
+  catch(call(jupyter:trace(Goal)),
         Exception,
         % In case of an exception, switch the debug mode off so that no more debugging messages are printed
         % If there are breakpoints, switch the debug mode back on
         % Otherwise, no debugging messages are output for those breakpoints
         (nodebug, switch_debug_mode_on_for_breakpoints, exception_message(Exception, ExceptionMessage))).
-
+call_with_exception_handling(MGoal, ExceptionMessage) :-
+  catch(call(MGoal),
+        Exception,
+        exception_message(Exception, ExceptionMessage)).
 
 switch_debug_mode_on_for_breakpoints :-
   % If there are any breakpoints, switch debug mode on
   user:current_breakpoint(_Conditions, _BID, _Status, _Kind, _Type),
   debug,
   !.
-
 :- endif.
 switch_debug_mode_on_for_breakpoints.
 
@@ -263,20 +271,17 @@ read_output_from_file(OutputFileName, _, Output) :-
   read_atom_from_file(OutputFileName, false, Output).
 
 
-% read_atom_from_file(+FileName, +DeleteLastLine, -FileContent)
+% read_atom_from_file(+FileName, +IsSicstusJupyterTrace, -FileContent)
 %
 % FileContent is an atom containing the content of the file with name FileName.
-% If DeleteLastLine=true, the last line of the file is not included.
-% This is needed in case of a jupyter:trace/1 goal:
-% - The last line is the debugging message for removing the printing breakpoint
-% - If an exception occurred, the second to last line is the debugging message of the call to output:add_silent_breakpoint/1
-read_atom_from_file(FileName, DeleteLastLine, FileContent) :-
+% If IsSicstusJupyterTrace=true, some of the lines of the file are not included.
+read_atom_from_file(FileName, IsSicstusJupyterTrace, FileContent) :-
   open(FileName, read, Stream),
   read_lines(Stream, AllLinesCodes),
   close(Stream),
   AllLinesCodes \= [],
   !,
-  delete_last_line(AllLinesCodes, DeleteLastLine, LineCodes),
+  remove_sicstus_trace_output(IsSicstusJupyterTrace, AllLinesCodes, LineCodes),
   % Create an atom from the line lists
   append(LineCodes, [_|ContentCodes]), % Cut off the first new line code
   atom_codes(FileContent, ContentCodes).
@@ -301,12 +306,35 @@ read_line_to_codes(Stream, Line) :-
 :- endif.
 
 
-% delete_last_line(+List, +DeleteLast, -NewList)
+% remove_sicstus_trace_output(+IsSicstusJupyterTrace, +Lines, -NewLines)
 %
-% If DeleteLast=true, NewList contains all elements of List except the last one.
-% Otherwise, NewList=List
-delete_last_line(List, DeleteLast, NewList) :-
-  DeleteLast == true,
+% Lines is a list of codes corresponding to lines read from a file to which output of a goal was written.
+% If IsSicstusJupyterTrace=true, the output was caused by a call of jupyter:trace/1 from SICStus Prolog and contains debugging messages
+% In that case, not all of the lines should be included in the output sent to the client.
+% Therefore, NewLines does not contain all elements of Lines.
+% Otherwise, NewLines=Lines.
+remove_sicstus_trace_output(IsSicstusJupyterTrace, Lines, Lines) :-
+  log(IsSicstusJupyterTrace),
+  IsSicstusJupyterTrace \== true,
   !,
-  append(NewList, [_Last], List).
-delete_last_line(List, _DeleteLast, List).
+  log(notrace).
+remove_sicstus_trace_output(_IsSicstusJupyterTrace, Lines, NewLines) :-
+  log(trace),
+  % The first element corresponds to the message '% The debugger will first creep -- showing everything (trace)'
+  Lines = [_TraceMessage|LinesWithoutTraceMessage],
+  % Remove the last two or three elements
+  % In case there is a breakpoint, debugging mode was switched back on and the last line contains the corresponding message "% The debugger will first leap -- showing spypoints (debug)"
+  % The preceding two elements correspond to the debugging message of nodebug/0 and its message "% The debugger is switched off"
+  ( current_prolog_flag(debug, on) ->
+    NumRemoveLastLines = 3
+  ; NumRemoveLastLines = 2
+  ),
+  length(RemoveList, NumRemoveLastLines),
+  append(LinesWithoutLastLines, RemoveList, LinesWithoutTraceMessage),
+  % In case debugging mode was on before trace mode was switched on, a clause for remove_trace_debugging_messages exists
+  % In that case, the remaining first to lines are debugging messages of the exit ports of trace/0 and jupyter:switch_trace_mode_on/0
+  ( remove_trace_debugging_messages ->
+    retractall(output:remove_trace_debugging_messages),
+    LinesWithoutLastLines = [_ExitMessage1, _ExitMessage2|NewLines]
+  ; NewLines = LinesWithoutLastLines
+  ).

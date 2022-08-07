@@ -243,12 +243,25 @@ port_functor(exception(_), exception).
 % All ports are unleashed so that the debugger does not stop at a breakpoint to wait for user input.
 % However, breakpoints are not affected by this.
 trace(Goal) :-
+  catch(retractall(output:remove_trace_debugging_messages), _Exception, true),
   module_name_expanded(Goal, MGoal),
-  trace,
+  switch_trace_mode_on,
   call(MGoal),
   !,
   nodebug,
   output:switch_debug_mode_on_for_breakpoints.
+
+
+switch_trace_mode_on :-
+  % The debugger is already switched on.
+  current_prolog_flag(debug, on),
+  !,
+  % When reading the output, some additional lines need to be removed
+  % This is done if a clause exists for remove_trace_debugging_messages/0
+  assert(output:remove_trace_debugging_messages),
+  trace.
+switch_trace_mode_on :-
+  trace.
 
 
 % module_name_expanded(+Term, -MTerm)

@@ -31,7 +31,7 @@ process_initialization_data(Args, Executable) :-
 process_initialization_data(Args, Executable) :-
   Args = ['-l','jsonrpc_server',
           '--goal','jsonrpc_server_start;halt.',
-          '--noinfo','--nologo'],
+          '--nologo', '--noinfo'],
   % $SP_APP_PATH: path to the SICStus that is running this file
   Executable = '$SP_APP_PATH'.
 :- endif.
@@ -558,7 +558,7 @@ test(load_test_file, [true(TestPredResult = ExpectedTestPredResult)]) :-
   check_equality(ErrorInfoSubterm, ExpectedErrorInfoSubterm),
   % Load the test file defining test_pred/1
   LoadRequest = 'ensure_loaded(test).',
-  ExpectedLoadResult = [type=query,bindings=json([]),output=''],
+  ExpectedLoadResult = [type=query,bindings=json([]),output=_LoadOutput],
   send_call_with_single_success_result(LoadRequest, 2, LoadResult),
   check_equality(LoadResult, ExpectedLoadResult),
   % Now the predicate exists
@@ -572,7 +572,7 @@ test(load_module, [true(ClpfdResult = ExpectedClpfdResult)]) :-
   check_equality(ErrorInfoSubterm, ExpectedErrorInfoSubterm),
   % Load the clpfd library defining the operators
   LoadRequest = 'use_module(library(clpfd)).',
-  ExpectedLoadResult = [type=query,bindings=json([]),output=''],
+  ExpectedLoadResult = [type=query,bindings=json([]),output=_LoadOutput],
   send_call_with_single_success_result(LoadRequest, 5, LoadResult),
   check_equality(LoadResult, ExpectedLoadResult),
   % Now the operators exist
@@ -735,10 +735,10 @@ expected_error_info_subterm(single_end_tests, 0, 69, '! The definition of a unit
 :- begin_tests(plunit_tests, [setup(start_process), cleanup(release_process(true))]).
 
 :- if(sicstus).
-test(load_test_definition_file, [true(Line1 = ExpectedLine1)]) :-
+test(load_test_definition_file, [true(DefinitionResult = ExpectedDefinitionResult)]) :-
   % Load a test definition file
   LoadRequest = '[test].',
-  ExpectedLoadResult = [type=query,bindings=json([]),output=''],
+  ExpectedLoadResult = [type=query,bindings=json([]),output=_LoadOutput],
   send_call_with_single_success_result(LoadRequest, 1, LoadResult),
   check_equality(LoadResult, ExpectedLoadResult),
   % Run the tests
@@ -758,17 +758,13 @@ test(load_test_definition_file, [true(Line1 = ExpectedLine1)]) :-
   check_equality(LastLines, ExpectedLastLines),
   % Defining other tests results in a redefinition message
   DefinitionRequest = ':- begin_tests(list). test(list) :- lists:is_list([]).',
-  % DefinitionOutput cannot be compared as is as it contains the absolute path to the test file
-  % DefinitionOutput is something like: '* The procedure \'unit body\'/4 is being redefined.\n*     Old file: .../test.pl\n*     New file: .../test_definition.pl\n* Approximate lines: 2-3, file: \'.../test_definition.pl\''
-  DefinitionResult = [type=directive,bindings=json([]),output=DefinitionOutput],
-  ExpectedLine1 = '* The procedure \'unit body\'/4 is being redefined.',
-  send_call_with_single_success_result(DefinitionRequest, 3, DefinitionResult),
-  sub_atom(DefinitionOutput, 0, 49, _, Line1).
+  ExpectedDefinitionResult = [type=directive,bindings=json([]),output=_LoadOutput2],
+  send_call_with_single_success_result(DefinitionRequest, 3, DefinitionResult).
 :- endif.
 
 test(multiple_units, [true(RunTestsResult = ExpectedRunTestsResult)]) :-
   DefinitionRequest = ':- begin_tests(list1, [condition(true)]). test(list) :- lists:is_list([]). :- end_tests(list1). :- begin_tests(list2). test(list_fail, [fail]) :- lists:is_list(1). :- end_tests(list2).',
-  ExpectedDefinitionResult = [type=directive,bindings=json([]),output='\n% Loaded the test file'],
+  ExpectedDefinitionResult = [type=directive,bindings=json([]),output=_LoadOutput],
   send_call_with_single_success_result(DefinitionRequest, 4, DefinitionResult),
   check_equality(DefinitionResult, ExpectedDefinitionResult),
   % Run the tests
@@ -808,9 +804,9 @@ test(test_2_definition_outside_unit_test, [true(CallResult = ExpectedCallResult)
 :- if(sicstus).
 test(test_definition_and_run_tests, [true(Result = ExpectedResult)]) :-
   Request = ':- begin_tests(list1, [condition(true)]).\n test(list) :-\n  lists:is_list([]).\n :- end_tests(list1).\n ?- run_tests.\n :- begin_tests(list2).\n test(list_fail, [fail]) :-\n  lists:is_list(1).\n :- end_tests(list2).\n ?- run_tests.',
-  ExpectedResult = json(['1'=json([status=success,type=directive,bindings=json([]),output='\n% Loaded the test file']),
+  ExpectedResult = json(['1'=json([status=success,type=directive,bindings=json([]),output=_LoadOutput1]),
                          '2'=json([status=success,type=query,bindings=json([]),output=_Output1]),
-                         '3'=json([status=success,type=directive,bindings=json([]),output='\n% Loaded the test file']),
+                         '3'=json([status=success,type=directive,bindings=json([]),output=_LoadOutput2]),
                          '4'=json([status=success,type=query,bindings=json([]),output=_Output2])]),
   send_success_call(Request, 12, Result).
 
@@ -824,7 +820,7 @@ test(predicate_redefinition_inside_unit_test, [true(RunTestsResult = ExpectedRun
   RedefinitionRequest = ':- begin_tests(print). print_test(X) :- nl. test(1) :- print_test(1). :- end_tests(print).',
   expected_retracted_clauses(predicate_redefinition_inside_unit_test, ExpectedRetractedClauses),
   ExpectedRedefinitionResult = json(['1'=json([status=success,type=clause_definition,bindings=json([]),output='% Asserting clauses for user:print_test/1\n',retracted_clauses=json(RetractedClauses)]),
-                                     '2'=json([status=success,type=directive,bindings=json([]),output='\n% Loaded the test file'])]),
+                                     '2'=json([status=success,type=directive,bindings=json([]),output=_LoadOutput])]),
   send_success_call(RedefinitionRequest, 14, RedefinitionResult),
   check_equality(RetractedClauses, ExpectedRetractedClauses),
   check_equality(RedefinitionResult, ExpectedRedefinitionResult),
@@ -837,10 +833,12 @@ test(predicate_redefinition_inside_unit_test, [true(RunTestsResult = ExpectedRun
 :- end_tests(plunit_tests).
 
 :- if(swi).
+expected_output(use_module_directive, '').
 expected_output(directive_failure, 'ERROR: Goal (directive) failed: member(4,[1,2,3])').
 expected_output(directive_failure_with_output, 'test\nERROR: Goal (directive) failed: print(test),fail').
 expected_output(multiple_directives_failure, 'ERROR: Goal (directive) failed: append(1,2,Res),print(Res)').
 :- else.
+expected_output(use_module_directive, '% module lists imported into user').
 expected_output(directive_failure, '* member(4,[1,2,3]) - goal failed').
 expected_output(directive_failure_with_output, 'test\n* print(test),fail - goal failed').
 expected_output(multiple_directives_failure, '* append(1,2,Res),print(Res) - goal failed').
@@ -851,7 +849,8 @@ expected_output(multiple_directives_failure, '* append(1,2,Res),print(Res) - goa
 
 test(use_module_directive, [true(Result = ExpectedResult)]) :-
   Request = ':- use_module(library(lists)).',
-  ExpectedResult = [type=directive,bindings=json([]),output=''],
+  expected_output(use_module_directive, ExpectedOutput),
+  ExpectedResult = [type=directive,bindings=json([]),output=ExpectedOutput],
   send_call_with_single_success_result(Request, 1, Result).
 
 test(directive_with_output, [true(RetryError = ExpectedRetryError)]) :-
@@ -1003,7 +1002,7 @@ test(jupyter_trace, [true(RetryError = ExpectedRetryError)]) :-
 test(spypoint_and_trace, [true(Call3Result = ExpectedCall3Result)]) :-
   % Add a spypoint for app/3
   AddBreakpointRequest = 'spy(app/3).',
-  ExpectedAddBreakpointResult = [type=query,bindings=json([]),output=''],
+  ExpectedAddBreakpointResult = [type=query,bindings=json([]),output='% Spy point on app/3'],
   send_call_with_single_success_result(AddBreakpointRequest, 8, AddBreakpointResult),
   check_equality(AddBreakpointResult, ExpectedAddBreakpointResult),
   % Call the predicate app/3
@@ -1055,7 +1054,7 @@ test(jupyter_trace, [true(DebuggingResult = ExpectedDebuggingResult)]) :-
 test(breakpoint_and_trace, [true(Call3Result = ExpectedCall3Result)]) :-
   % Add a breakpoint which causes only the first argument of a app/3 goal to be printed
   AddBreakpointRequest = 'add_breakpoint(pred(app/3)-[print-[1], proceed], _BID).',
-  ExpectedAddBreakpointResult = [type=query,bindings=json([]),output=''],
+  ExpectedAddBreakpointResult = [type=query,bindings=json([]),output='% The debugger will first zip -- showing spypoints (zip)\n% Conditional spypoint for user:app/3 added, BID=1'],
   send_call_with_single_success_result(AddBreakpointRequest, 7, AddBreakpointResult),
   check_equality(AddBreakpointResult, ExpectedAddBreakpointResult),
   % Call the predicate app/3
@@ -1065,24 +1064,24 @@ test(breakpoint_and_trace, [true(Call3Result = ExpectedCall3Result)]) :-
   check_equality(CallResult, ExpectedCallResult),
   % Created breakpoints are activated during a jupyter:trace/1 call
   TraceRequest = 'jupyter:trace(app([1], [2], [3], [1,2,3])).',
-  ExpectedTraceResult = [type=query,bindings=json([]),output='        9      1 Call: app([1],[2],[3],[1,2,3])\n *     10      2 Call: ^1 [2]\n *     11      3 Call: ^1 []\n *     11      3 Exit: ^1 []\n *     10      2 Exit: ^1 [2]\n *     12      2 Call: ^1 [1]\n *     13      3 Call: ^1 []\n *     13      3 Exit: ^1 []\n *     12      2 Exit: ^1 [1]\n        9      1 Exit: app([1],[2],[3],[1,2,3])'],
+  ExpectedTraceResult = [type=query,bindings=json([]),output=' *     11      3 Call: ^1 []\n *     11      3 Exit: ^1 []\n *     10      2 Exit: ^1 [2]\n *     12      2 Call: ^1 [1]\n *     13      3 Call: ^1 []\n *     13      3 Exit: ^1 []\n *     12      2 Exit: ^1 [1]\n        9      1 Exit: app([1],[2],[3],[1,2,3])'],
   send_call_with_single_success_result(TraceRequest, 9, TraceResult),
   check_equality(TraceResult, ExpectedTraceResult),
   % Since there is a breakpoint, after the jupyter:trace/1 call, debug mode is still on and debugging messages are printed
   Call2Request = 'app([1], [2], [1,2]).',
-  ExpectedCall2Result = [type=query,bindings=json([]),output=' *   3368     13 Call: ^1 [1]\n *   3369     14 Call: ^1 []\n *   3369     14 Exit: ^1 []\n *   3368     13 Exit: ^1 [1]'],
+  ExpectedCall2Result = [type=query,bindings=json([]),output=' *   2914     13 Call: ^1 [1]\n *   2915     14 Call: ^1 []\n *   2915     14 Exit: ^1 []\n *   2914     13 Exit: ^1 [1]'],
   send_call_with_single_success_result(Call2Request, 10, Call2Result),
   check_equality(Call2Result, ExpectedCall2Result),
   % After an exception, debug mode is still on and debugging messages are printed
   ExceptionRequest = 'jupyter:trace((3 is 1 + x)).',
-  ExpectedExceptionOutput = '     5396     22 Exit: trace\n     5397     22 Call: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5397     22 Exception: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5394     21 Exception: jupyter:trace(3 is 1+x)\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5393     20 Exception: call(jupyter:trace(3 is 1+x))',
+  ExpectedExceptionOutput = '     4962     22 Call: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     4962     22 Exception: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     4954     21 Exception: jupyter:trace(3 is 1+x)\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     4953     20 Exception: call(jupyter:trace(3 is 1+x))',
   ExpectedErrorInfo = '! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x',
   Error = json([code= -4712,message='Exception',data=json([error_info=ErrorInfo, output=ExceptionOutput])]),
   send_call_with_single_error_result(ExceptionRequest, 11, Error),
   check_equality(ExceptionOutput, ExpectedExceptionOutput),
   check_equality(ErrorInfo, ExpectedErrorInfo),
   Call3Request = 'app([1], [2], [1,2]).',
-  ExpectedCall3Result = [type=query,bindings=json([]),output=' *  10514     22 Call: ^1 [1]\n *  10515     23 Call: ^1 []\n *  10515     23 Exit: ^1 []\n *  10514     22 Exit: ^1 [1]'],
+  ExpectedCall3Result = [type=query,bindings=json([]),output=' *   9942     22 Call: ^1 [1]\n *   9943     23 Call: ^1 []\n *   9943     23 Exit: ^1 []\n *   9942     22 Exit: ^1 [1]'],
   send_call_with_single_success_result(Call3Request, 12, Call3Result).
 
 :- endif.
@@ -1276,6 +1275,13 @@ test(print_table_2_no_single_goal, [true(ErrorInfoSubterm = ExpectedErrorInfoSub
 :- end_tests(print_table).
 
 
+:- if(swi).
+expected_output(previous_query_time_sleep, '').
+:- else.
+expected_output(previous_query_time_sleep, '% module system imported into user').
+:- endif.
+
+
 :- begin_tests(previous_query_time, [setup(start_process), cleanup(release_process(true))]).
 
 test(previous_query_time_no_previous_query, [true(Error = ExpectedError)]) :-
@@ -1295,7 +1301,8 @@ test(previous_query_time_member, [true(LastQueryTimeResult = ExpectedLastQueryTi
 
 test(previous_query_time_sleep, [true(LastQueryTimeResult = ExpectedLastQueryTimeResult)]) :-
   SleepRequest = 'use_module(library(system)), sleep(1).',
-  ExpectedSleepResult = [type=query,bindings=json([]),output=''],
+  expected_output(previous_query_time_sleep, ExpectedOutput),
+  ExpectedSleepResult = [type=query,bindings=json([]),output=ExpectedOutput],
   send_call_with_single_success_result(SleepRequest, 4, SleepResult),
   check_equality(SleepResult, ExpectedSleepResult),
   % Get the goal and runtime of the previous query
@@ -1357,7 +1364,7 @@ expected_variable_bindings(multiple_ranges_for_one_variable, ['X'=json([dom='1..
 
 
 load_clpfd_module :-
-  send_call_with_single_success_result('use_module(library(clpfd)).', 0, [type=query,bindings=json([]),output='']).
+  send_call_with_single_success_result('use_module(library(clpfd)).', 0, [type=query,bindings=json([]),output=_LoadOutput]).
 
 
 :- begin_tests(clpfd, [setup((start_process, load_clpfd_module)), cleanup(release_process(true))]).

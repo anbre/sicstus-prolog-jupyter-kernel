@@ -26,13 +26,19 @@ jsonrpc_server_start :-
 
 
 :- if(swi).
-setup.
+setup :-
+  % The tests in jsonrpc_server_tests.pl need to be started without printing informational messages
+  % In order for those messages to be printed during an execution, a corresponding Prolog flag has to be set
+  set_prolog_flag(verbose, normal).
 :- else.
 setup :-
   % Turn leashing off for all ports so that no user interaction is required when a breakpoint is activated
   leash(off),
   % Make sure that redefinitions are performed without user interaction and warnings are issued
-  set_prolog_flag(redefine_warnings, proceed).
+  set_prolog_flag(redefine_warnings, proceed),
+  % The tests in jsonrpc_server_tests.pl need to be started without printing informational messages
+  % In order for those messages to be printed during an execution, a corresponding Prolog flag has to be set
+  set_prolog_flag(informational, on).
 :- endif.
 
 
