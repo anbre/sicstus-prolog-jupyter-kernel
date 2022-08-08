@@ -1,4 +1,8 @@
 
+% This file defines PL-Unit tests.
+% It is used by the tests in jsonrpc_server_tests.pl for loading and running a test file with the Prolog server.
+
+
 test_pred(a).
 test_pred(b).
 

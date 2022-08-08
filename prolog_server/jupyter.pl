@@ -253,8 +253,9 @@ trace(Goal) :-
 
 
 switch_trace_mode_on :-
-  % The debugger is already switched on.
-  current_prolog_flag(debug, on),
+  current_prolog_flag(debugging, Debugging),
+  member(Debugging, [debug, trace]),
+  % The debugger is already switched on
   !,
   % When reading the output, some additional lines need to be removed
   % This is done if a clause exists for remove_trace_debugging_messages/0

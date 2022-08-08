@@ -314,12 +314,9 @@ read_line_to_codes(Stream, Line) :-
 % Therefore, NewLines does not contain all elements of Lines.
 % Otherwise, NewLines=Lines.
 remove_sicstus_trace_output(IsSicstusJupyterTrace, Lines, Lines) :-
-  log(IsSicstusJupyterTrace),
   IsSicstusJupyterTrace \== true,
-  !,
-  log(notrace).
+  !.
 remove_sicstus_trace_output(_IsSicstusJupyterTrace, Lines, NewLines) :-
-  log(trace),
   % The first element corresponds to the message '% The debugger will first creep -- showing everything (trace)'
   Lines = [_TraceMessage|LinesWithoutTraceMessage],
   % Remove the last two or three elements

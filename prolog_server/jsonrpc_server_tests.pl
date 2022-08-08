@@ -1064,24 +1064,24 @@ test(breakpoint_and_trace, [true(Call3Result = ExpectedCall3Result)]) :-
   check_equality(CallResult, ExpectedCallResult),
   % Created breakpoints are activated during a jupyter:trace/1 call
   TraceRequest = 'jupyter:trace(app([1], [2], [3], [1,2,3])).',
-  ExpectedTraceResult = [type=query,bindings=json([]),output=' *     11      3 Call: ^1 []\n *     11      3 Exit: ^1 []\n *     10      2 Exit: ^1 [2]\n *     12      2 Call: ^1 [1]\n *     13      3 Call: ^1 []\n *     13      3 Exit: ^1 []\n *     12      2 Exit: ^1 [1]\n        9      1 Exit: app([1],[2],[3],[1,2,3])'],
+  ExpectedTraceResult = [type=query,bindings=json([]),output='        9      1 Call: app([1],[2],[3],[1,2,3])\n *     10      2 Call: ^1 [2]\n *     11      3 Call: ^1 []\n *     11      3 Exit: ^1 []\n *     10      2 Exit: ^1 [2]\n *     12      2 Call: ^1 [1]\n *     13      3 Call: ^1 []\n *     13      3 Exit: ^1 []\n *     12      2 Exit: ^1 [1]\n        9      1 Exit: app([1],[2],[3],[1,2,3])'],
   send_call_with_single_success_result(TraceRequest, 9, TraceResult),
   check_equality(TraceResult, ExpectedTraceResult),
   % Since there is a breakpoint, after the jupyter:trace/1 call, debug mode is still on and debugging messages are printed
   Call2Request = 'app([1], [2], [1,2]).',
-  ExpectedCall2Result = [type=query,bindings=json([]),output=' *   2914     13 Call: ^1 [1]\n *   2915     14 Call: ^1 []\n *   2915     14 Exit: ^1 []\n *   2914     13 Exit: ^1 [1]'],
+  ExpectedCall2Result = [type=query,bindings=json([]),output=' *   3379     13 Call: ^1 [1]\n *   3380     14 Call: ^1 []\n *   3380     14 Exit: ^1 []\n *   3379     13 Exit: ^1 [1]'],
   send_call_with_single_success_result(Call2Request, 10, Call2Result),
   check_equality(Call2Result, ExpectedCall2Result),
   % After an exception, debug mode is still on and debugging messages are printed
   ExceptionRequest = 'jupyter:trace((3 is 1 + x)).',
-  ExpectedExceptionOutput = '     4962     22 Call: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     4962     22 Exception: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     4954     21 Exception: jupyter:trace(3 is 1+x)\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     4953     20 Exception: call(jupyter:trace(3 is 1+x))',
+  ExpectedExceptionOutput = '     5414     22 Call: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5414     22 Exception: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5405     21 Exception: jupyter:trace(3 is 1+x)\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5404     20 Exception: call(jupyter:trace(3 is 1+x))',
   ExpectedErrorInfo = '! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x',
   Error = json([code= -4712,message='Exception',data=json([error_info=ErrorInfo, output=ExceptionOutput])]),
   send_call_with_single_error_result(ExceptionRequest, 11, Error),
   check_equality(ExceptionOutput, ExpectedExceptionOutput),
   check_equality(ErrorInfo, ExpectedErrorInfo),
   Call3Request = 'app([1], [2], [1,2]).',
-  ExpectedCall3Result = [type=query,bindings=json([]),output=' *   9942     22 Call: ^1 [1]\n *   9943     23 Call: ^1 []\n *   9943     23 Exit: ^1 []\n *   9942     22 Exit: ^1 [1]'],
+  ExpectedCall3Result = [type=query,bindings=json([]),output=' *  10366     22 Call: ^1 [1]\n *  10367     23 Call: ^1 []\n *  10367     23 Exit: ^1 []\n *  10366     22 Exit: ^1 [1]'],
   send_call_with_single_success_result(Call3Request, 12, Call3Result).
 
 :- endif.
