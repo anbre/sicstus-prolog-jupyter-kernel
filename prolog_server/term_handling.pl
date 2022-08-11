@@ -184,6 +184,7 @@ clause_head(Head, Head).
 retract_previous_clauses(MPredSpec, RetractedClausesJson, Output) :-
   retract_definition_specs(PredDefinitionSpecs),
   retract_previous_clauses(MPredSpec, PredDefinitionSpecs, NewPredDefinitionSpecs, RetractedClauses, Output),
+  catch(retractall(pred_definition_specs(_)), _Exception, true),
   assert(pred_definition_specs(NewPredDefinitionSpecs)),
   ( var(RetractedClauses) ->
     RetractedClausesJson = json([])
