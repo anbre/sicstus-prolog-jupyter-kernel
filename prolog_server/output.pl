@@ -12,7 +12,7 @@
 
 
 :- module(output,
-    [remove_trace_debugging_messages/0,
+    [remove_output_lines_for/1,         % remove_output_lines_for(Type),
      send_reply_on_error/0,
      query_data/4,                      % query_data(-CallRequestId, -Runtime, -TermData, -OriginalTermData)
      call_with_output_to_file/3,        % call_with_output_to_file(+Goal, -Output, -ExceptionMessage)
@@ -43,11 +43,11 @@ sicstus :- catch(current_prolog_flag(dialect, sicstus), _, fail).
 
 
 :- dynamic
-  remove_trace_debugging_messages/0,
+  remove_output_lines_for/1,  % remove_output_lines_for(Type),
   send_reply_on_error/0,
-  output_stream/1, % output_stream(OutputStream)
-  query_data/4. % query_data(CallRequestId, Runtime, TermData, OriginalTermData)
-                % TermData and OriginalTermData are terms of the form term_data(TermAtom, Bindings)
+  output_stream/1,            % output_stream(OutputStream)
+  query_data/4.               % query_data(CallRequestId, Runtime, TermData, OriginalTermData)
+                              % TermData and OriginalTermData are terms of the form term_data(TermAtom, Bindings)
 
 
 % If send_reply_on_error exists, an error reply is sent to the client if an unhandled error occurs and is printed with print_message/2.
@@ -281,10 +281,13 @@ read_atom_from_file(FileName, IsSicstusJupyterTrace, FileContent) :-
   close(Stream),
   AllLinesCodes \= [],
   !,
-  remove_sicstus_trace_output(IsSicstusJupyterTrace, AllLinesCodes, LineCodes),
+  remove_output_lines(IsSicstusJupyterTrace, AllLinesCodes, LineCodes),
   % Create an atom from the line lists
-  append(LineCodes, [_|ContentCodes]), % Cut off the first new line code
-  atom_codes(FileContent, ContentCodes).
+  ( LineCodes == [] ->
+    FileContent = ''
+  ; append(LineCodes, [_|ContentCodes]), % Cut off the first new line code
+    atom_codes(FileContent, ContentCodes)
+  ).
 read_atom_from_file(_FileName, _DeleteLastLine, '').
 
 
@@ -306,17 +309,16 @@ read_line_to_codes(Stream, Line) :-
 :- endif.
 
 
-% remove_sicstus_trace_output(+IsSicstusJupyterTrace, +Lines, -NewLines)
+% remove_output_lines(+IsSicstusJupyterTrace, +Lines, -NewLines)
 %
 % Lines is a list of codes corresponding to lines read from a file to which output of a goal was written.
-% If IsSicstusJupyterTrace=true, the output was caused by a call of jupyter:trace/1 from SICStus Prolog and contains debugging messages
-% In that case, not all of the lines should be included in the output sent to the client.
-% Therefore, NewLines does not contain all elements of Lines.
-% Otherwise, NewLines=Lines.
-remove_sicstus_trace_output(IsSicstusJupyterTrace, Lines, Lines) :-
-  IsSicstusJupyterTrace \== true,
-  !.
-remove_sicstus_trace_output(_IsSicstusJupyterTrace, Lines, NewLines) :-
+% In some cases such as for a jupyter:trace/1 or juypter:print_sld_tree/1 call, not all lines should be included in the output sent to the client.
+% This is determined by IsSicstusJupyterTrace and the dynamic predicate remove_output_lines_for/1.
+remove_output_lines(IsSicstusJupyterTrace, Lines, NewLines) :-
+  IsSicstusJupyterTrace == true,
+  !,
+  % The output was caused by a call of jupyter:trace/1 from SICStus Prolog and contains debugging messages
+
   % The first element corresponds to the message '% The debugger will first creep -- showing everything (trace)'
   Lines = [_TraceMessage|LinesWithoutTraceMessage],
   % Remove the last two or three elements
@@ -328,10 +330,24 @@ remove_sicstus_trace_output(_IsSicstusJupyterTrace, Lines, NewLines) :-
   ),
   length(RemoveList, NumRemoveLastLines),
   append(LinesWithoutLastLines, RemoveList, LinesWithoutTraceMessage),
-  % In case debugging mode was on before trace mode was switched on, a clause for remove_trace_debugging_messages exists
+  % In case debugging mode was on before trace mode was switched on, a clause remove_output_lines_for(trace_debugging_messages) exists
   % In that case, the remaining first to lines are debugging messages of the exit ports of trace/0 and jupyter:switch_trace_mode_on/0
-  ( remove_trace_debugging_messages ->
-    retractall(output:remove_trace_debugging_messages),
+  ( remove_output_lines_for(trace_debugging_messages) ->
+    retractall(remove_output_lines_for(trace_debugging_messages)),
     LinesWithoutLastLines = [_ExitMessage1, _ExitMessage2|NewLines]
   ; NewLines = LinesWithoutLastLines
   ).
+remove_output_lines(_IsSicstusJupyterTrace, Lines, NewLines) :-
+  remove_output_lines_for(sld_tree_breakpoint_messages),
+  !,
+  retractall(remove_output_lines_for(sld_tree_breakpoint_messages)),
+  % The output was produced by a call of jupyter:print_sld_tree
+  % The first two lines are of the following form:
+  % "% The debugger will first leap -- showing spypoints (debug)"
+  % "% Generic spypoint added, BID=1"
+  % The last line is like the following:
+  % "% Generic spypoint, BID=1, removed (last)"
+  % The lines corresponding to those messages are removed
+  append(LinesWithoutLast, [_LastLine], Lines),
+  LinesWithoutLast = [_First, _Second|NewLines].
+remove_output_lines(_IsSicstusJupyterTrace, Lines, Lines).

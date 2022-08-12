@@ -30,7 +30,8 @@
     [handle_term/6,            % handle_term(+Term, +IsSingleTerm, +CallRequestId, +Stack, +Bindings, -Cont)
      test_definition_end/1,    % test_definition_end(+LoadFile)
      pred_definition_specs/1,  % pred_definition_specs(PredDefinitionSpecs)
-     term_response/1           % term_response(JsonResponse)
+     term_response/1,          % term_response(JsonResponse)
+     assert_sld_data/4         % assert_sld_data(Port, Goal, Frame, ParentFrame)
     ]).
 
 
@@ -38,8 +39,8 @@ swi     :- catch(current_prolog_flag(dialect, swi), _, fail), !.
 sicstus :- catch(current_prolog_flag(dialect, sicstus), _, fail).
 
 
-:- use_module(library(codesio), [write_term_to_codes/3, format_to_codes/3]).
-:- use_module(library(lists), [delete/3]).
+:- use_module(library(codesio), [write_term_to_codes/3, format_to_codes/3, read_term_from_codes/3]).
+:- use_module(library(lists), [delete/3, reverse/2]).
 :- use_module(logging, [log/1, log/2]).
 :- use_module(output, [call_with_output_to_file/3, call_query_with_output_to_file/7, redirect_output_to_file/0, exception_message/2, assert_query_start_time/0]).
 :- use_module(jsonrpc, [send_error_reply/3]).
@@ -168,7 +169,6 @@ handle_clause_definition(Clause) :-
   ).
 
 
-% doch nicht duplicate? Falls es für trace für sicstus nicht gebraucht wird
 % module_name_expanded(+Term, -MTerm)
 module_name_expanded((Module:Head:-Body), Module:(Head:-Body)) :- !.
 module_name_expanded(Module:Term, Module:Term) :- !.
@@ -340,6 +340,9 @@ handle_query_term_(jupyter:print_table(Goal), _IsDirective, _CallRequestId, _Sta
   handle_print_table_with_findall(Bindings, Goal).
 handle_query_term_(jupyter:print_table(ValuesLists, VariableNames), _IsDirective, _CallRequestId, _Stack, Bindings, _OriginalTermData, _LoopCont, continue) :- !,
   handle_print_table(Bindings, ValuesLists, VariableNames).
+% print_sld_tree
+handle_query_term_(jupyter:print_sld_tree(Goal), _IsDirective, _CallRequestId, _Stack, Bindings, _OriginalTermData, _LoopCont, continue) :- !,
+  handle_print_sld_tree(Goal, Bindings).
 % run_tests
 handle_query_term_(run_tests, _IsDirective, CallRequestId, Stack, Bindings, _OriginalTermData, _LoopCont, Cont) :- !,
   handle_run_tests(run_tests, CallRequestId, Stack, Bindings, Cont).
@@ -399,11 +402,7 @@ handle_query(Goal, IsDirective, CallRequestId, Stack, Bindings, OriginalTermData
     assert_query_failure_response(IsDirective, GoalAtom, RetryMessageAndOutput),
     Cont = continue
   ; otherwise -> % Success
-    % Update the stored variable bindings
-    remove_singleton_variables(Bindings, BindingsWithoutSingletons),
-    update_variable_bindings(BindingsWithoutSingletons),
-    % Convert the variable values to json parsable terms
-    json_parsable_vars(BindingsWithoutSingletons, Bindings, ResultBindings),
+    handle_result_variable_bindings(Bindings, ResultBindings),
     assert_query_success_response(IsDirective, ResultBindings, RetryMessageAndOutput),
     % Start a new recursive loop so that the current goal can be retried
     % The loop will
@@ -488,6 +487,15 @@ retry_message(true, GoalAtom, RetryMessage) :-
   format_to_codes('% Retrying goal: ~w~n', [GoalAtom], RetryMessageCodes),
   atom_codes(RetryMessage, RetryMessageCodes).
 retry_message(_IsRetry, _GoalAtom, '').
+
+
+% handle_result_variable_bindings(+Bindings, -ResultBindings)
+handle_result_variable_bindings(Bindings, ResultBindings) :-
+  % Update the stored variable bindings
+  remove_singleton_variables(Bindings, BindingsWithoutSingletons),
+  update_variable_bindings(BindingsWithoutSingletons),
+  % Convert the variable values to json parsable terms
+  json_parsable_vars(BindingsWithoutSingletons, Bindings, ResultBindings).
 
 
 % remove_singleton_variables(+Bindings, -BindingsWithoutSingletons)
@@ -852,6 +860,304 @@ json_parsable_results([Result|Results], [_VarName|VarNames], Bindings, [ResultAt
   write_term_to_atom(Result, Bindings, ResultAtom),
   json_parsable_results(Results, VarNames, Bindings, JsonParsableResults).
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Print SLD Trees
+
+% Create content for a file representing the SLD tree of an execution in DOT.
+% The collection of the data needs to be handled differntly for SWI- and SICStus Prolog:
+% - SICStus: a breakpoint which is removed after the execution.
+% - SWI: user:prolog_trace_interception/4 is used that calls assert_sld_data/4 which succeeds if SLD data is to be collected (if a clause collect_sld_data/0 exists).
+
+% The graph file content is created like the following.
+% Nodes are defined by their ID and labelled with the goal.
+% Directed edges are added from a parent invocation to the child invocation.
+% This may look like the following:
+%   digraph {
+%       "4" [label="app([1,2],[3],A)"]
+%       "5" [label="app([2],[3],B)"]
+%       "6" [label="app([],[3],C)"]
+%       "4" -> "5"
+%       "5" -> "6"
+%   }
+
+
+:- dynamic
+    collect_sld_data/0,
+    sld_data/3.          % sld_data(GoalCodes, Current, Parent)
+
+
+% assert_sld_data(+Port, +MGoal, +Current, +Parent)
+%
+% Assert the data which is needed to create a dot file representing the SLD tree.
+% For SICStus Prolog, Current and Parent are invocation numbers of the current invovation and the parent invocation.
+% For SWI-Prolog, Current and Parent are integer references to the frame.
+assert_sld_data(call, MGoal, Current, Parent) :-
+  collect_sld_data, % SLD data is to be colleted
+  !,
+  % If the goal is module name expanded with the user module, remove the module expansion
+  ( MGoal = user:Goal ->
+    true
+  ; Goal = MGoal
+  ),
+  % Assert the goal as character codes so that the variable names can be preserved and replaced consistently
+  write_term_to_codes(Goal, GoalCodes, []),
+  assertz(sld_data(GoalCodes, Current, Parent)).
+assert_sld_data(_Port, _MGoal, _Current, _Parent) :-
+  collect_sld_data. % SLD data is to be colleted, but not for ports other than call
+
+
+% handle_print_sld_tree(+Goal, +Bindings)
+handle_print_sld_tree(Goal, Bindings) :-
+  % Assert collect_sld_data/0 so that SLD data is collected during tracing (needed for SWI-Prolog)
+  assert(collect_sld_data),
+  % Retract previous data
+  catch(retractall(sld_data(_GoalCodes, _Inv, _ParentInv)), _GoalInvDataException, true),
+  % Call the goal and collect the needed data
+  output:call_query_with_output_to_file(term_handling:call_with_sld_data_collection(Goal, Exception, IsFailure), 0, Bindings, _OriginalTermData, Output, _ExceptionMessage, _IsFailure),
+  retractall(collect_sld_data),
+  % Compute the graph file content
+  graph_file_content(GraphFileContentAtom),
+  % Assert the result response
+  ( nonvar(Exception) -> % Exception
+    !,
+    output:exception_message(Exception, ExceptionMessage),
+    assert_error_response(exception, ExceptionMessage, Output, [print_sld_tree=GraphFileContentAtom])
+  ; IsFailure == true -> % Failure
+    !,
+    assert_error_response(failure, '', Output, [print_sld_tree=GraphFileContentAtom])
+  ; otherwise -> % Success
+    handle_result_variable_bindings(Bindings, ResultBindings),
+    assert_success_response(query, ResultBindings, Output, [print_sld_tree=GraphFileContentAtom])
+  ).
+
+
+:- if(swi).
+
+% call_with_sld_data_collection(+Goal, -Exception -IsFailure)
+call_with_sld_data_collection(Goal, Exception, IsFailure) :-
+  module_name_expanded(Goal, MGoal),
+  catch(call_with_failure_handling(MGoal, IsFailure), Exception, notrace).
+
+
+% call_with_failure_handling(+Goal, -IsFailure)
+call_with_failure_handling(Goal, IsFailure) :-
+  trace,
+  ( call(Goal) ->
+    notrace,
+    IsFailure = false
+  ; notrace,
+    IsFailure = true
+  ).
+
+:- else.
+
+% call_with_sld_data_collection(+Goal, -Exception -IsFailure)
+call_with_sld_data_collection(Goal, Exception, IsFailure) :-
+  module_name_expanded(Goal, MGoal),
+  BreakpointConditions = [call]-[proceed, goal(Module:DebuggerGoal), inv(Inv), parent_inv(ParentInv), true(assert_sld_data(call, Module:DebuggerGoal, Inv, ParentInv))],
+  % Make sure that when the output is read in, some informational messages are removed
+  assert(output:remove_output_lines_for(sld_tree_breakpoint_messages)),
+  % Calling debug/0 makes sure that an informational message is always output which can then be removed
+  debug,
+  catch(
+    call_with_failure_handling(MGoal, BreakpointConditions, IsFailure),
+    Exception,
+    % In case of an exception, first turn of tracing so that no more data is asserted
+    % Then, remove the created breakpoint
+    ( notrace, current_breakpoint(BreakpointConditions, BID, _Status, _Kind, _Type), remove_breakpoints([BID]) )
+  ).
+
+
+% call_with_failure_handling(+Goal, +BreakpointConditions, -IsFailure)
+%
+% Adds a breakpoint which collects data, calls the goal and removes the breakpoint.
+call_with_failure_handling(Goal, BreakpointConditions, IsFailure) :-
+  add_breakpoint(BreakpointConditions, BID),
+  ( call(Goal) ->
+    remove_breakpoints([BID]),
+    IsFailure = false
+  ; remove_breakpoints([BID]),
+    IsFailure = true
+  ).
+
+:- endif.
+
+
+% graph_file_content(-GraphFileContentAtom)
+%
+% GraphFileContentAtom is an atom representing the content of a graph file which would represent the SLD tree of the current execution.
+% Collects the data which was asserted as sld_data/3.
+% For each element (except the ones for the toplevel call and remove_breakpoints/1), an atom is created representing one of the lines of the file.
+graph_file_content(GraphFileContentAtom) :-
+  findall(GoalCodes-Id-ParentId, sld_data(GoalCodes, Id, ParentId), SldData),
+  clean_sld_data(SldData, CleanSldData),
+  % Compute nodes content
+  node_atoms(CleanSldData, 'A', [], Nodes),
+  % Compute edges content
+  % The first element corresponds to a call from the toplevel
+  % SldDataWithoutToplevelCalls contains all elements from CleanSldData which do not correspond to teplevel calls with the same ParentId
+  CleanSldData = [_Goal-_CurrentId-ToplevelId|_],
+  delete_all_occurrences(CleanSldData, _G-_Id-ToplevelId, SldDataWithoutToplevelCalls),
+  edge_atoms(SldDataWithoutToplevelCalls, Edges),
+  % Build the file content atom
+  % Append elements to the list with which the remaining file content is added
+  append(Edges, ['}'], EdgesWithClosingBracket),
+  append(Nodes, EdgesWithClosingBracket, NodesAndEdgesWithClosingBracket),
+  atom_concat(['digraph {\n'|NodesAndEdgesWithClosingBracket], GraphFileContentAtom).
+
+
+% clean_sld_data(+SldData, -CleanSldData)
+%
+% For SIW- and SICStus Prolog, the list of SLD tree data needs to be handled differently before it can be used to compute graph file content.
+:- if(swi).
+
+clean_sld_data(SldData, CleanSldData) :-
+  compute_unique_ids(SldData, 1, [], CleanSldData).
+
+
+% compute_unique_ids(+SldData, +CurrentId, +ActiveIds, -SldDataWithUniqueIds)
+%
+% SldData is a list with elements of the form GoalCodes-CurrentFrame-ParentFrame.
+% CurrentFrame and ParentFrame are integer references to the local stack frame.
+% Since these are not unique, they cannot be used to compute the graph file and instead, unique IDs need to be computed.
+% ActiveIds is a list of Frame-Id pairs.
+% Every element in SldData is assigned a ID (CurrentId).
+% For every element, checks if an element CurrentFrame-Id is contained in ActiveIds.
+%   If so, there was another goal on the same level as the current one.
+%   In that case, the element in SldData is "replaced" with CurrentFrame-CurrentId.
+%   Otherwise, a new element CurrentFrame-NewID is added to SldData.
+% For every element in SldData, ActiveIds contains an element ParentFrame-ParentId (except for the toplevel goals)
+% SldDataWithUniqueIds contains GoalCodes-CurrentId-ParentId elements.
+compute_unique_ids([], _CurrentId, _ActiveIds, []).
+compute_unique_ids([GoalCodes-CurrentFrame-ParentFrame|SldData], CurrentId, ActiveIds, [GoalCodes-CurrentId-ParentId|SldDataWithUniqueIds]) :-
+  ( member(CurrentFrame-PreviousId, ActiveIds) ->
+    % A goal on the same level was already encountered
+    % The corresponding element needs to be replaced in the active ID list
+    delete(ActiveIds, CurrentFrame-PreviousId, ReaminingActiveIds),
+    NewActiveIds = [CurrentFrame-CurrentId|ReaminingActiveIds]
+  ; NewActiveIds = [CurrentFrame-CurrentId|ActiveIds]
+  ),
+  % Retrieve the parent's ID
+  ( member(ParentFrame-Id, ActiveIds) ->
+    ParentId = Id
+  ; % For the toplevel calls, there is no parent ID
+    ParentId = 0
+  ),
+  NextId is CurrentId + 1,
+  compute_unique_ids(SldData, NextId, NewActiveIds, SldDataWithUniqueIds).
+
+:- else.
+
+clean_sld_data(SldData, CleanSldData) :-
+  % Remove the last element because it corresponds to the call of remove_breakpoints/1
+  append(CleanSldData, [_RemoveBreakpointsData], SldData).
+
+:- endif.
+
+
+% node_atoms(+SldData, +CurrentReplacementAtom +VariableNameReplacements, -NodeAtoms)
+%
+% SldData is a list with elements of the form GoalCodes-Current-Parent.
+% For each of the elements, NodeAtoms contains an atom of the following form: '"Current" [label="Goal"]'
+% All variable names, which are of the form _12345 are replaced by names starting with 'A'.
+% CurrentReplacementAtom is the atom the next variable name is to be replaced with.
+% In order to keep the renaming consistent for all terms, VariableNameReplacements is a list with VarName=NameReplacement pairs for name replacements which were made for the previous terms.
+node_atoms([], _CurrentReplacementAtom, _VariableNameReplacements, []) :- !.
+node_atoms([GoalCodes-Current-_Parent|SldData], CurrentReplacementAtom, VariableNameReplacements, [Node|Nodes]) :-
+  % Read the goal term from the codes with the option variable_names/1 so that variable names can be replaced consistently
+  append(GoalCodes, [46], GoalCodesWithFullStop),
+  read_term_from_codes(GoalCodesWithFullStop, GoalTerm, [variable_names(VariableNames)]),
+  % Replace the variable names
+  replace_variable_names(VariableNames, CurrentReplacementAtom, VariableNameReplacements, NextReplacementAtom, NewVariableNameReplacements),
+  % Create the atom
+  format_to_codes('    \"~w\" [label=\"~w\"]~n', [Current, GoalTerm], NodeCodes),
+  atom_codes(Node, NodeCodes),
+  node_atoms(SldData, NextReplacementAtom, NewVariableNameReplacements, Nodes).
+
+
+% replace_variable_names(+VariableNames, +CurrentReplacementAtom, +VariableNameReplacements, -NextReplacementAtom, -NewVariableNameReplacements)
+replace_variable_names([], CurrentReplacementAtom, VariableNameReplacements, CurrentReplacementAtom, VariableNameReplacements) :- !.
+replace_variable_names([Var=Name|VariableNames], CurrentReplacementAtom, VariableNameReplacements, NextReplacementAtom, NewVariableNameReplacements) :-
+  member(Var=ReplacementAtom, VariableNameReplacements),
+  !,
+  % The variable has already been assigned a new name
+  Name = ReplacementAtom,
+  replace_variable_names(VariableNames, CurrentReplacementAtom, VariableNameReplacements, NextReplacementAtom, NewVariableNameReplacements).
+replace_variable_names([Var=Name|VariableNames], CurrentReplacementAtom, VariableNameReplacements, OutputReplacementAtom, NewVariableNameReplacements) :-
+  % The variable has not been assigned a new name
+  Name = CurrentReplacementAtom,
+  next_replacement_atom(CurrentReplacementAtom, NextReplacementAtom),
+  replace_variable_names(VariableNames, NextReplacementAtom, [Var=CurrentReplacementAtom|VariableNameReplacements], OutputReplacementAtom, NewVariableNameReplacements).
+
+
+% next_replacement_atom(+CurrentReplacementAtom, -NextReplacementAtom)
+%
+% In order to compute the next replacement atom, CurrentReplacementAtom is converted into a list of character codes.
+% If the last code does not equal 90 (i.e. 'Z'), the code is increased and the codes are converted into NextReplacementAtom.
+% Otherwise, the code cannot be increased further, so a new character code for 'A' is added to the list.
+next_replacement_atom(CurrentReplacementAtom, NextReplacementAtom) :-
+  atom_codes(CurrentReplacementAtom, CurrentCodes),
+  append(PrecedingCodes, [LastCode], CurrentCodes),
+  % Compute the next last code(s)
+  ( LastCode == 90 ->
+    % The code 90 corresponds to 'Z' and cannot simply be increased
+    % Instead, an additional character code needs to be added
+    NextCodeList = [90, 65]
+  ; NextCode is LastCode + 1,
+    NextCodeList = [NextCode]
+  ),
+  % Compute the new code list and atom
+  ( PrecedingCodes == [] ->
+    NextReplacementCodes = NextCodeList
+  ; append(PrecedingCodes, NextCodeList, NextReplacementCodes)
+  ),
+  atom_codes(NextReplacementAtom, NextReplacementCodes).
+
+
+% delete_all_occurrences(+List, +DeleteElement, -NewList)
+%
+% NewList is a list containing all elements of the List which are not equal to DeleteElement.
+% In order to not bind any variables, copy_term/2 is used.
+delete_all_occurrences([], _DeleteElement, []) :- !.
+delete_all_occurrences([Element|List], DeleteElement, NewList) :-
+  copy_term(DeleteElement, CopyDeleteElement),
+  Element = CopyDeleteElement,
+  !,
+  delete_all_occurrences(List, DeleteElement, NewList).
+delete_all_occurrences([Element|List], DeleteElement, [Element|NewList]) :-
+  delete_all_occurrences(List, DeleteElement, NewList).
+
+
+% edge_atoms(+SldData, -Edges)
+%
+% SldData is a list with elements of the form GoalCodes-Current-Parent.
+% For each of these elements, Edges contains an atom of the following form: '    "Parent" -> "Current"~n'
+edge_atoms([], []) :- !.
+edge_atoms([_GoalCodes-Current-Parent|SldData], [EdgeAtom|Edges]) :-
+  format_to_codes('    \"~w\" -> \"~w\"~n', [Parent, Current], EdgeCodes),
+  atom_codes(EdgeAtom, EdgeCodes),
+  edge_atoms(SldData, Edges).
+
+
+% atom_concat(+AtomList, -ResultAtom)
+%
+% ResultAtom is an atom which results from concatenating all atoms in the list AtomList.
+atom_concat(Atoms, ResultAtom) :-
+  reverse(Atoms, ReversedAtoms),
+  atom_concat_(ReversedAtoms, '', ResultAtom).
+
+% atom_concat(+AtomList, +AtomSoFar, -ResultAtom)
+atom_concat_([], AtomSoFar, AtomSoFar) :- !.
+atom_concat_([Atom|Atoms], AtomSoFar, ResultAtom) :-
+  atom_concat(Atom, AtomSoFar, NewAtomSoFar),
+  atom_concat_(Atoms, NewAtomSoFar, ResultAtom).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% TODO transitions
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

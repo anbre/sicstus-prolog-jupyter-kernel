@@ -16,6 +16,7 @@ sicstus :- catch(current_prolog_flag(dialect, sicstus), _, fail).
 :- use_module(logging, [create_log_file/0, log/1, log/2]).
 :- use_module(jupyter, []).
 :- use_module(request_handling, [loop/3]).
+:- use_module(term_handling, [assert_sld_data/4]).
 
 
 jsonrpc_server_start :-
@@ -39,6 +40,48 @@ setup :-
   % The tests in jsonrpc_server_tests.pl need to be started without printing informational messages
   % In order for those messages to be printed during an execution, a corresponding Prolog flag has to be set
   set_prolog_flag(informational, on).
+:- endif.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Trace interception for SWI-Prolog
+
+
+:- if(swi).
+
+% user:prolog_trace_interception(+Port, +Frame, +Choice, -Action)
+%
+% Action=continue corresponds to creeping in the command line debugger, so that no user interaction is required.
+user:prolog_trace_interception(_Port, Frame, _PC, continue) :-
+  prolog_frame_attribute(Frame, hidden, true),
+  % Do nothing for frames hidden from the user
+  !.
+user:prolog_trace_interception(Port, Frame, _PC, continue) :-
+  prolog_frame_attribute(Frame, goal, Goal),
+  prolog_frame_attribute(Frame, parent, ParentFrame),
+  term_handling:assert_sld_data(Port, Goal, Frame, ParentFrame),
+  % Succeeds if the current query is a call of jupyter:print_sld_tree/1
+  !.
+user:prolog_trace_interception(Port, Frame, PC, continue) :-
+  % Print the debugging message as output by the tracer to the current output
+  % This is needed for juypter:trace/1 calls
+  current_output(OutputStream),
+  port_functor(Port, PortFunctor),
+  phrase('$messages':translate_message(frame(Frame, PortFunctor, PC)), TraceMessageLines),
+  print_message_lines(OutputStream, '', TraceMessageLines),
+  nl(OutputStream).
+
+
+% port_functor(+Port, -PortFunctor)
+port_functor(call, call).
+port_functor(redo(_), redo).
+port_functor(unify, unify).
+port_functor(exit, exit).
+port_functor(fail, fail).
+port_functor(exception(_), exception).
+
 :- endif.
 
 

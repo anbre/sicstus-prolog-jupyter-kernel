@@ -32,14 +32,6 @@ sicstus :- catch(current_prolog_flag(dialect, sicstus), _, fail).
 % In that case, the execution is handled by the module term_handling.
 % Otherwise, an error message is output.
 
-% print_table(+Goal)
-jupyter:print_table(_Goal) :-
-  throw(jupyter(no_single_goal(jupyter:print_table/1))).
-
-% print_table(+ValuesLists, +VariableNames)
-jupyter:print_table(_ValuesLists, _VariableNames) :-
-  throw(jupyter(no_single_goal(jupyter:print_table/2))).
-
 % retry
 jupyter:retry :-
   throw(jupyter(no_single_goal(jupyter:retry/0))).
@@ -53,6 +45,20 @@ jupyter:cut :-
 
 user:cut :-
   throw(jupyter(no_single_goal(jupyter:cut/0))).
+
+
+% jupyter:print_table(+Goal)
+jupyter:print_table(_Goal) :-
+  throw(jupyter(no_single_goal(jupyter:print_table/1))).
+
+% jupyter:print_table(+ValuesLists, +VariableNames)
+jupyter:print_table(_ValuesLists, _VariableNames) :-
+  throw(jupyter(no_single_goal(jupyter:print_table/2))).
+
+
+% jupyter:print_sld_tree(+Goal)
+jupyter:print_sld_tree(_Goal) :-
+  throw(jupyter(no_single_goal(jupyter:print_sld_tree/1))).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -160,6 +166,12 @@ predicate_doc('jupyter:print_table/2', Doc) :-
     '\n        jupyter:print_table([[10,100],[20,400],[30,900]], [\'X\', \'Y\']).',
     '\n        jupyter:print_table($ResultLists, []).'
   ], Doc).
+predicate_doc('jupyter:print_sld_tree/1', Doc) :-
+  atom_concat([
+    'jupyter:print_sld_tree(+Goal)',
+    '\n\n    Executes the goal Goal and prints its SLD tree.',
+    '\n\n    Needs to be the only goal of a query.'
+  ], Doc).
 predicate_doc('jupyter:previous_query_time/2', Doc) :-
   atom_concat([
     'jupyter:previous_query_time(-Goal, -Runtime)',
@@ -177,6 +189,8 @@ predicate_doc('jupyter:print_previous_queries/1', Doc) :-
 
 
 % atom_concat(+AtomList, -ResultAtom)
+%
+% ResultAtom is an atom which results from concatenating all atoms in the list AtomList.
 atom_concat(Atoms, ResultAtom) :-
   reverse(Atoms, ReversedAtoms),
   atom_concat_(ReversedAtoms, '', ResultAtom).
@@ -200,38 +214,12 @@ atom_concat_([Atom|Atoms], AtomSoFar, ResultAtom) :-
 %
 % Switch the tracer on, call the goal Goal and stop the tracer.
 % Debug mode is switched on so that any breakpoints which might exist can be activated.
-% Because of user:prolog_trace_interception/4, debugging messages are printed to the current output without requesting user interaction.
+% Because of user:prolog_trace_interception/4 defined in jsonrpc_server, debugging messages are printed to the current output without requesting user interaction.
 trace(Goal) :-
   trace,
   call(Goal),
   !,
   notrace.
-
-
-% user:prolog_trace_interception(+Port, +Frame, +Choice, -Action)
-%
-% Print the debugging messages to the current output.
-% Action=continue corresponds ot creeping in the command line debugger, so that no user interaction is required.
-user:prolog_trace_interception(_Port, Frame, _PC, continue) :-
-  prolog_frame_attribute(Frame, hidden, true),
-  % Do nothing for frames hidden from the user
-  !.
-user:prolog_trace_interception(Port, Frame, PC, continue) :-
-  % Print the debugging message as output by the tracer
-  current_output(OutputStream),
-  port_functor(Port, PortFunctor),
-  phrase('$messages':translate_message(frame(Frame, PortFunctor, PC)), TraceMessageLines),
-  print_message_lines(OutputStream, '', TraceMessageLines),
-  nl(OutputStream).
-
-
-% port_functor(+Port, -PortFunctor)
-port_functor(call, call).
-port_functor(redo(_), redo).
-port_functor(unify, unify).
-port_functor(exit, exit).
-port_functor(fail, fail).
-port_functor(exception(_), exception).
 
 :- else.
 
@@ -243,7 +231,7 @@ port_functor(exception(_), exception).
 % All ports are unleashed so that the debugger does not stop at a breakpoint to wait for user input.
 % However, breakpoints are not affected by this.
 trace(Goal) :-
-  catch(retractall(output:remove_trace_debugging_messages), _Exception, true),
+  catch(retractall(output:remove_output_lines_for(trace_debugging_messages)), _Exception, true),
   module_name_expanded(Goal, MGoal),
   switch_trace_mode_on,
   call(MGoal),
@@ -258,8 +246,8 @@ switch_trace_mode_on :-
   % The debugger is already switched on
   !,
   % When reading the output, some additional lines need to be removed
-  % This is done if a clause exists for remove_trace_debugging_messages/0
-  assert(output:remove_trace_debugging_messages),
+  % This is done if a clause output:remove_output_lines_for(trace_debugging_messages) exists
+  assert(output:remove_output_lines_for(trace_debugging_messages)),
   trace.
 switch_trace_mode_on :-
   trace.

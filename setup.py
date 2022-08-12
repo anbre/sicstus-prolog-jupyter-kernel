@@ -12,6 +12,7 @@ setup(
 		"jupyter_client",
 		"IPython",
 		"ipykernel",
+		"graphviz",
 	] + PrologKernel.additional_package_requirements,
 	classifiers=[
 		"Intended Audience :: Developers",

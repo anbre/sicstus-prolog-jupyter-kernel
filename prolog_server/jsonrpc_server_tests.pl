@@ -1,4 +1,7 @@
 
+% This file provides tests for the Prolog server defined in the module jsonrpc_server.
+% Some of the tests rely on exact invocation numbers, which is why they might fail when the source code is changed or when a single test is run instead of test unit.
+
 
 swi     :- catch(current_prolog_flag(dialect, swi), _, fail), !.
 sicstus :- catch(current_prolog_flag(dialect, sicstus), _, fail).
@@ -651,6 +654,17 @@ test(static_predicate_definition_error_and_redefinition, [true(ErrorInfoSubterm 
   % Get the subterm of the error info which is to be compared with the expected one
   sub_atom(ErrorInfo, Before, Length, _, ErrorInfoSubterm).
 
+test(multiple_clauses_for_multiple_predicates_without_retract, [true(DefinitionResult = ExpectedDefinitionResult)]) :-
+  DefinitionRequest = 'a(1). a(2). b(1). b(2). b(3). c(1). c(2).',
+  ExpectedDefinitionResult = json(['1'=json([status=success,type=clause_definition,bindings=json([]),output='% Asserting clauses for user:a/1\n',retracted_clauses=json([])]),
+                                   '2'=json([status=success,type=clause_definition,bindings=json([]),output='',retracted_clauses=json([])]),
+                                   '3'=json([status=success,type=clause_definition,bindings=json([]),output='% Asserting clauses for user:b/1\n',retracted_clauses=json([])]),
+                                   '4'=json([status=success,type=clause_definition,bindings=json([]),output='',retracted_clauses=json([])]),
+                                   '5'=json([status=success,type=clause_definition,bindings=json([]),output='',retracted_clauses=json([])]),
+                                   '6'=json([status=success,type=clause_definition,bindings=json([]),output='% Asserting clauses for user:c/1\n',retracted_clauses=json([])]),
+                                   '7'=json([status=success,type=clause_definition,bindings=json([]),output='',retracted_clauses=json([])])]),
+  send_success_call(DefinitionRequest, 9, DefinitionResult).
+
 :- end_tests(clause_definitions).
 
 
@@ -966,6 +980,8 @@ define_app_predicates :-
   check_equality(DefinitionResult, ExpectedDefinitionResult).
 
 
+% Some of these tests rely on exact invocation numbers, which is why they might fail when the source code is changed or when a single test is run instead of test unit.
+
 :- begin_tests(debugging, [setup((start_process, define_app_predicates)), cleanup(release_process(true))]).
 
 test(trace_0, [true(ErrorInfoSubterm = ExpectedErrorInfoSubterm)]) :-
@@ -1069,21 +1085,20 @@ test(breakpoint_and_trace, [true(Call3Result = ExpectedCall3Result)]) :-
   check_equality(TraceResult, ExpectedTraceResult),
   % Since there is a breakpoint, after the jupyter:trace/1 call, debug mode is still on and debugging messages are printed
   Call2Request = 'app([1], [2], [1,2]).',
-  ExpectedCall2Result = [type=query,bindings=json([]),output=' *   3379     13 Call: ^1 [1]\n *   3380     14 Call: ^1 []\n *   3380     14 Exit: ^1 []\n *   3379     13 Exit: ^1 [1]'],
+  ExpectedCall2Result = [type=query,bindings=json([]),output=' *   3380     13 Call: ^1 [1]\n *   3381     14 Call: ^1 []\n *   3381     14 Exit: ^1 []\n *   3380     13 Exit: ^1 [1]'],
   send_call_with_single_success_result(Call2Request, 10, Call2Result),
   check_equality(Call2Result, ExpectedCall2Result),
   % After an exception, debug mode is still on and debugging messages are printed
   ExceptionRequest = 'jupyter:trace((3 is 1 + x)).',
-  ExpectedExceptionOutput = '     5414     22 Call: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5414     22 Exception: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5405     21 Exception: jupyter:trace(3 is 1+x)\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5404     20 Exception: call(jupyter:trace(3 is 1+x))',
+  ExpectedExceptionOutput = '     5417     22 Call: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5417     22 Exception: 3 is 1+x\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5408     21 Exception: jupyter:trace(3 is 1+x)\n! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x\n     5407     20 Exception: call(jupyter:trace(3 is 1+x))',
   ExpectedErrorInfo = '! Type error in argument 2 of (is)/2\n! expected evaluable, but found x/0\n! goal:  3 is 1+x',
   Error = json([code= -4712,message='Exception',data=json([error_info=ErrorInfo, output=ExceptionOutput])]),
   send_call_with_single_error_result(ExceptionRequest, 11, Error),
   check_equality(ExceptionOutput, ExpectedExceptionOutput),
   check_equality(ErrorInfo, ExpectedErrorInfo),
   Call3Request = 'app([1], [2], [1,2]).',
-  ExpectedCall3Result = [type=query,bindings=json([]),output=' *  10366     22 Call: ^1 [1]\n *  10367     23 Call: ^1 []\n *  10367     23 Exit: ^1 []\n *  10366     22 Exit: ^1 [1]'],
+  ExpectedCall3Result = [type=query,bindings=json([]),output=' *  10370     22 Call: ^1 [1]\n *  10371     23 Call: ^1 []\n *  10371     23 Exit: ^1 []\n *  10370     22 Exit: ^1 [1]'],
   send_call_with_single_success_result(Call3Request, 12, Call3Result).
-
 :- endif.
 
 :- end_tests(debugging).
@@ -1403,6 +1418,100 @@ test(truth_value, [true(Result = ExpectedResult)]) :-
 :- endif.
 
 :- end_tests(clpfd).
+
+
+:- if(swi).
+expected_error_info_subterm(print_sld_tree_no_single_goal, 0, 67, 'ERROR: jupyter:print_sld_tree/1 needs to be the only goal in a term').
+expected_error_info_subterm(sld_tree_exception, 0, 48, 'ERROR: is/2: Arithmetic: `a/0\' is not a function').
+
+expected_output(sld_tree_exception, '1').
+
+expected_print_sld_tree(sld_tree_with_variable_bindings, 'digraph {\n    "1" [label="pred(A,B)"]\n    "2" [label="g1(A,C)"]\n    "3" [label="g11(A,D)"]\n    "4" [label="g12(b,C)"]\n    "5" [label="g2(c,B)"]\n    "1" -> "2"\n    "2" -> "3"\n    "2" -> "4"\n    "1" -> "5"\n}').
+expected_print_sld_tree(sld_tree_with_multiple_goals_and_output, 'digraph {\n    "1" [label="print(test)"]\n    "2" [label="app([1,2],[3],[4],[1,2,3,4])"]\n    "3" [label="app([3],[4],A)"]\n    "4" [label="print(3)"]\n    "5" [label="app([],[4],B)"]\n    "6" [label="app([1,2],[3,4],[1,2,3,4])"]\n    "7" [label="print(1)"]\n    "8" [label="app([2],[3,4],[2,3,4])"]\n    "9" [label="print(2)"]\n    "10" [label="app([],[3,4],[3,4])"]\n    "11" [label="print(done)"]\n    "2" -> "3"\n    "3" -> "4"\n    "3" -> "5"\n    "2" -> "6"\n    "6" -> "7"\n    "6" -> "8"\n    "8" -> "9"\n    "8" -> "10"\n}').
+expected_print_sld_tree(sld_tree_failure, 'digraph {\n    "1" [label="print(failure_test)"]\n    "2" [label="lists:append([1],[2],[3])"]\n}').
+expected_print_sld_tree(sld_tree_exception, 'digraph {\n    "1" [label="member_square([1,a,3])"]\n    "2" [label="lists:member(A,[1,a,3])"]\n    "3" [label="B is 1*1"]\n    "4" [label="print(1)"]\n    "5" [label="fail"]\n    "6" [label="B is a*a"]\n    "1" -> "2"\n    "1" -> "3"\n    "1" -> "4"\n    "1" -> "5"\n    "1" -> "6"\n}').
+
+:- else.
+expected_error_info_subterm(print_sld_tree_no_single_goal, 0, 62, '! jupyter:print_sld_tree/1 needs to be the only goal in a term').
+expected_error_info_subterm(sld_tree_exception, 0, 82, '! Type error in argument 2 of (is)/2\n! expected evaluable, but found a/0\n! goal:  ').
+%                                                      '! Type error in argument 2 of (is)/2\n! expected evaluable, but found a/0\n! goal:  _702439 is a*a'
+
+expected_output(sld_tree_exception, '1\n% The debugger is switched off').
+
+expected_print_sld_tree(sld_tree_with_variable_bindings, 'digraph {\n    "4" [label="pred(A,B)"]\n    "5" [label="g1(A,C)"]\n    "6" [label="g11(A,D)"]\n    "7" [label="g12(b,C)"]\n    "8" [label="g2(c,B)"]\n    "4" -> "5"\n    "5" -> "6"\n    "5" -> "7"\n    "4" -> "8"\n}').
+expected_print_sld_tree(sld_tree_with_multiple_goals_and_output, 'digraph {\n    "6934" [label="print(test)"]\n    "6935" [label="app([1,2],[3],[4],[1,2,3,4])"]\n    "6936" [label="app([3],[4],A)"]\n    "6937" [label="print(3)"]\n    "6938" [label="app([],[4],B)"]\n    "6939" [label="app([1,2],[3,4],[1,2,3,4])"]\n    "6940" [label="print(1)"]\n    "6941" [label="app([2],[3,4],[2,3,4])"]\n    "6942" [label="print(2)"]\n    "6943" [label="app([],[3,4],[3,4])"]\n    "6944" [label="print(done)"]\n    "6935" -> "6936"\n    "6936" -> "6937"\n    "6936" -> "6938"\n    "6935" -> "6939"\n    "6939" -> "6940"\n    "6939" -> "6941"\n    "6941" -> "6942"\n    "6941" -> "6943"\n}').
+expected_print_sld_tree(sld_tree_failure, 'digraph {\n    "12495" [label="print(failure_test)"]\n    "12496" [label="append([1],[2],[3])"]\n}').
+expected_print_sld_tree(sld_tree_exception, 'digraph {\n    "16757" [label="member_square([1,a,3])"]\n    "16758" [label="member(A,[1,a,3])"]\n    "16759" [label="B is 1*1"]\n    "16760" [label="print(1)"]\n    "16761" [label="B is a*a"]\n    "16757" -> "16758"\n    "16757" -> "16759"\n    "16757" -> "16760"\n    "16757" -> "16761"\n}').
+
+:- endif.
+
+
+% These tests rely on exact invocation numbers, which is why they might fail when the source code is changed or when a single test is run instead of test unit.
+
+:- begin_tests(print_sld_tree, [setup((start_process)), cleanup(release_process(true))]).
+
+test(sld_tree_with_variable_bindings, [true(Result = ExpectedResult)]) :-
+  % Define clauses
+  DefinitionRequest = 'pred(X, Z) :- g1(X, Y), g2(Y, Z). g1(X, Z) :- g11(X, Y), g12(Y, Z). g11(a, b). g12(b, c). g2(c, d).',
+  ExpectedDefinitionResult = json(['1'=json([status=success,type=clause_definition,bindings=json([]),output='% Asserting clauses for user:pred/2\n',retracted_clauses=json([])]),
+                                   '2'=json([status=success,type=clause_definition,bindings=json([]),output='% Asserting clauses for user:g1/2\n',retracted_clauses=json([])]),
+                                   '3'=json([status=success,type=clause_definition,bindings=json([]),output='% Asserting clauses for user:g11/2\n',retracted_clauses=json([])]),
+                                   '4'=json([status=success,type=clause_definition,bindings=json([]),output='% Asserting clauses for user:g12/2\n',retracted_clauses=json([])]),
+                                   '5'=json([status=success,type=clause_definition,bindings=json([]),output='% Asserting clauses for user:g2/2\n',retracted_clauses=json([])])]),
+  send_success_call(DefinitionRequest, 1, DefinitionResult),
+  check_equality(DefinitionResult, ExpectedDefinitionResult),
+  % Print the SLD tree
+  Request = 'jupyter:print_sld_tree(pred(X, Y)).',
+  expected_print_sld_tree(sld_tree_with_variable_bindings, ExpectedSldData),
+  ExpectedResult = [type=query,bindings=json(['X'=a,'Y'=d]),output='',print_sld_tree=SldData],
+  check_equality(SldData, ExpectedSldData),
+  send_call_with_single_success_result(Request, 2, Result).
+
+test(sld_tree_with_multiple_goals_and_output, [true(Result = ExpectedResult)]) :-
+  % Define clauses
+  DefinitionRequest = 'app([], Res, Res) :- !. app([Head|Tail], List, [Head|Res]) :-  print(Head),  app(Tail, List, Res). app(L1, L2, L3, Res) :-  app(L2, L3, R1),  app(L1, R1, Res).',
+  ExpectedDefinitionResult = json(['1'=json([status=success,type=clause_definition,bindings=json([]),output='% Asserting clauses for user:app/3\n',retracted_clauses=json([])]),
+                                   '2'=json([status=success,type=clause_definition,bindings=json([]),output='',retracted_clauses=json([])]),
+                                   '3'=json([status=success,type=clause_definition,bindings=json([]),output='% Asserting clauses for user:app/4\n',retracted_clauses=json([])])]),
+  send_success_call(DefinitionRequest, 3, DefinitionResult),
+  check_equality(DefinitionResult, ExpectedDefinitionResult),
+  % Print the SLD tree
+  Request = 'jupyter:print_sld_tree((print(test), app([1, 2], [3], [4], [1,2,3,4]), print(done))).',
+  expected_print_sld_tree(sld_tree_with_multiple_goals_and_output, ExpectedSldData),
+  ExpectedResult = [type=query,bindings=json([]),output=test312done,print_sld_tree=SldData],
+  check_equality(SldData, ExpectedSldData),
+  send_call_with_single_success_result(Request, 4, Result).
+
+test(sld_tree_failure, [true(Result = ExpectedResult)]) :-
+  % When printing the SLD tree, everything computed before the failure is output
+  Request = 'jupyter:print_sld_tree((print(failure_test), append([1], [2], [3]), print(not_reached))).',
+  expected_print_sld_tree(sld_tree_failure, ExpectedSldData),
+  ExpectedResult = json([code= -4711,message='Failure',data=json([error_info='',output=failure_test,print_sld_tree=SldData])]),
+  check_equality(SldData, ExpectedSldData),
+  send_call_with_single_error_result(Request, 5, Result).
+
+test(sld_tree_exception, [true(SldData = ExpectedSldData)]) :-
+  % Define a predicate
+  DefinitionRequest = 'member_square(List) :- member(M, List), S is M*M, print(S), fail.',
+  ExpectedDefinitionResult = [type=clause_definition,bindings=json([]),output='% Asserting clauses for user:member_square/1\n',retracted_clauses=json([])],
+  send_call_with_single_success_result(DefinitionRequest, 6, DefinitionResult),
+  check_equality(DefinitionResult, ExpectedDefinitionResult),
+  % When printing the SLD tree, everything computed before the exception is output
+  Request = 'jupyter:print_sld_tree(member_square([1,a,3])).',
+  expected_error_info_subterm(sld_tree_exception, Before, Length, ExpectedErrorInfoSubterm),
+  expected_output(sld_tree_exception, ExpectedOutput),
+  expected_print_sld_tree(sld_tree_exception, ExpectedSldData),
+  Result = json([code= -4712,message='Exception',data=json([error_info=ErrorInfo,output=Output,print_sld_tree=SldData])]),
+  send_call_with_single_error_result(Request, 7, Result),
+  % Get the subterm of the error info which is to be compared with the expected one
+  sub_atom(ErrorInfo, Before, Length, _, ErrorInfoSubterm),
+  check_equality(ErrorInfoSubterm, ExpectedErrorInfoSubterm),
+  check_equality(Output, ExpectedOutput).
+
+test(print_sld_tree_no_single_goal, [true(ErrorInfoSubterm = ExpectedErrorInfoSubterm)]) :-
+  error_result_message_subterms(print_sld_tree_no_single_goal, 'jupyter:print_sld_tree(print(test)), print(exception).', 8, ErrorInfoSubterm, ExpectedErrorInfoSubterm).
+
+:- end_tests(print_sld_tree).
 
 
 :- begin_tests(help, [setup((start_process)), cleanup(release_process(true))]).
