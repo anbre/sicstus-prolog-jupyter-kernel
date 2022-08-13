@@ -61,6 +61,11 @@ jupyter:print_sld_tree(_Goal) :-
   throw(jupyter(no_single_goal(jupyter:print_sld_tree/1))).
 
 
+% jupyter:print_sld_tree(+PredSpec, +FromIndex, +ToIndex, +LabelIndex)
+jupyter:print_transition_graph(_PredSpec, _FromIndex, _ToIndex, _LabelIndex) :-
+  throw(jupyter(no_single_goal(jupyter:print_transition_graph/4))).
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -170,6 +175,18 @@ predicate_doc('jupyter:print_sld_tree/1', Doc) :-
   atom_concat([
     'jupyter:print_sld_tree(+Goal)',
     '\n\n    Executes the goal Goal and prints its SLD tree.',
+    '\n\n    Needs to be the only goal of a query.'
+  ], Doc).
+predicate_doc('jupyter:print_transition_graph/4', Doc) :-
+  atom_concat([
+    'jupyter:print_transition_graph(+PredSpec, +FromIndex, +ToIndex, +LabelIndex)',
+    '\n\n    Finds all solutions of the predicate with specificaion PredSpec.',
+    '\n    Prints a graph interpreting the solutions as transitions.',
+    '\n\n    PredSpec needs to be of the form PredName/PredArity.',
+    '\n    Optionally, it can be module name expanded.',
+    '\n\n    FromIndex and ToIndex point to predicate arguments used as nodes.',
+    '\n    LabelIndex points to the argument providing a label for an edge.',
+    '\n    If LabelIndex=0, no label is shown.',
     '\n\n    Needs to be the only goal of a query.'
   ], Doc).
 predicate_doc('jupyter:previous_query_time/2', Doc) :-

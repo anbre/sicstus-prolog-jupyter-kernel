@@ -402,7 +402,9 @@ class PrologBaseKernel(Kernel):
         if 'print_table' in dict:
             self.handle_print_table(dict['print_table'])
         if 'print_sld_tree' in dict:
-            self.handle_print_sld_tree(dict['print_sld_tree'])
+            self.handle_print_graph(dict['print_sld_tree'])
+        if 'print_transition_graph' in dict:
+            self.handle_print_graph(dict['print_transition_graph'])
 
 
     def handle_retracted_clauses(self, retracted_clauses):
@@ -493,14 +495,14 @@ class PrologBaseKernel(Kernel):
         self.send_response(self.iopub_socket, 'display_data', display_data)
 
 
-    def handle_print_sld_tree(self, print_sld_tree_file_content):
+    def handle_print_graph(self, graph_file_content):
         """
-        The string print_sld_tree_file_content corresponds to the content of a file from which a svg file can be rendered with dot.
-        This file is rendered and sent to the client
+        The string graph_file_content corresponds to the content of a file from which a svg file can be rendered with dot.
+        This file is rendered and sent to the client.
 
         Example
         ------
-        print_sld_tree_file_content could be the following:
+        graph_file_content can look like the following
         graph {
             "1" [label="user:pred"]
             "2" [label="user:sub_goal_1"]
@@ -519,25 +521,25 @@ class PrologBaseKernel(Kernel):
         """
 
         # Write the content to a file
-        f = open("sld_tree.gv", "w")
-        f.write(print_sld_tree_file_content)
+        f = open("graph.gv", "w")
+        f.write(graph_file_content)
         f.close()
 
         # Render a svg file
-        graphviz.render(engine='dot', format='svg', filepath='sld_tree.gv', outfile='sld_tree.svg').replace('\\', '/')
+        graphviz.render(engine='dot', format='svg', filepath='graph.gv', outfile='graph.svg').replace('\\', '/')
 
         # Read the svg file content
-        svg_file = open("sld_tree.svg", "r")
+        svg_file = open("graph.svg", "r")
         svg_content = svg_file.read()
 
         # Remove the created files
-        os.remove("sld_tree.gv")
-        os.remove("sld_tree.svg")
+        os.remove("graph.gv")
+        os.remove("graph.svg")
 
         # Send the data to the client
         display_data = {
             'data': {
-                'text/plain': print_sld_tree_file_content,
+                'text/plain': graph_file_content,
                 'image/svg+xml': svg_content,
                 #'text/latex': "", TODO?
             },

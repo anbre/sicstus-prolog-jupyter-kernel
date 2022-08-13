@@ -25,15 +25,15 @@ sicstus :- catch(current_prolog_flag(dialect, sicstus), _, fail).
 % process_initialization_data(-Args, -Executable)
 :- if(swi).
 process_initialization_data(Args, Executable) :-
-  Args = ['-l','jsonrpc_server',
+  Args = ['-l', 'jsonrpc_server',
           '-t', 'jsonrpc_server_start',
           '-q'],
   % The value of the Prolog flag executable is the pathname of the running executable
   current_prolog_flag(executable, Executable).
 :- else.
 process_initialization_data(Args, Executable) :-
-  Args = ['-l','jsonrpc_server',
-          '--goal','jsonrpc_server_start;halt.',
+  Args = ['-l', 'jsonrpc_server',
+          '--goal', 'jsonrpc_server_start;halt.',
           '--nologo', '--noinfo'],
   % $SP_APP_PATH: path to the SICStus that is running this file
   Executable = '$SP_APP_PATH'.
@@ -1430,7 +1430,6 @@ expected_print_sld_tree(sld_tree_with_variable_bindings, 'digraph {\n    "1" [la
 expected_print_sld_tree(sld_tree_with_multiple_goals_and_output, 'digraph {\n    "1" [label="print(test)"]\n    "2" [label="app([1,2],[3],[4],[1,2,3,4])"]\n    "3" [label="app([3],[4],A)"]\n    "4" [label="print(3)"]\n    "5" [label="app([],[4],B)"]\n    "6" [label="app([1,2],[3,4],[1,2,3,4])"]\n    "7" [label="print(1)"]\n    "8" [label="app([2],[3,4],[2,3,4])"]\n    "9" [label="print(2)"]\n    "10" [label="app([],[3,4],[3,4])"]\n    "11" [label="print(done)"]\n    "2" -> "3"\n    "3" -> "4"\n    "3" -> "5"\n    "2" -> "6"\n    "6" -> "7"\n    "6" -> "8"\n    "8" -> "9"\n    "8" -> "10"\n}').
 expected_print_sld_tree(sld_tree_failure, 'digraph {\n    "1" [label="print(failure_test)"]\n    "2" [label="lists:append([1],[2],[3])"]\n}').
 expected_print_sld_tree(sld_tree_exception, 'digraph {\n    "1" [label="member_square([1,a,3])"]\n    "2" [label="lists:member(A,[1,a,3])"]\n    "3" [label="B is 1*1"]\n    "4" [label="print(1)"]\n    "5" [label="fail"]\n    "6" [label="B is a*a"]\n    "1" -> "2"\n    "1" -> "3"\n    "1" -> "4"\n    "1" -> "5"\n    "1" -> "6"\n}').
-
 :- else.
 expected_error_info_subterm(print_sld_tree_no_single_goal, 0, 62, '! jupyter:print_sld_tree/1 needs to be the only goal in a term').
 expected_error_info_subterm(sld_tree_exception, 0, 82, '! Type error in argument 2 of (is)/2\n! expected evaluable, but found a/0\n! goal:  ').
@@ -1442,7 +1441,6 @@ expected_print_sld_tree(sld_tree_with_variable_bindings, 'digraph {\n    "4" [la
 expected_print_sld_tree(sld_tree_with_multiple_goals_and_output, 'digraph {\n    "6934" [label="print(test)"]\n    "6935" [label="app([1,2],[3],[4],[1,2,3,4])"]\n    "6936" [label="app([3],[4],A)"]\n    "6937" [label="print(3)"]\n    "6938" [label="app([],[4],B)"]\n    "6939" [label="app([1,2],[3,4],[1,2,3,4])"]\n    "6940" [label="print(1)"]\n    "6941" [label="app([2],[3,4],[2,3,4])"]\n    "6942" [label="print(2)"]\n    "6943" [label="app([],[3,4],[3,4])"]\n    "6944" [label="print(done)"]\n    "6935" -> "6936"\n    "6936" -> "6937"\n    "6936" -> "6938"\n    "6935" -> "6939"\n    "6939" -> "6940"\n    "6939" -> "6941"\n    "6941" -> "6942"\n    "6941" -> "6943"\n}').
 expected_print_sld_tree(sld_tree_failure, 'digraph {\n    "12495" [label="print(failure_test)"]\n    "12496" [label="append([1],[2],[3])"]\n}').
 expected_print_sld_tree(sld_tree_exception, 'digraph {\n    "16757" [label="member_square([1,a,3])"]\n    "16758" [label="member(A,[1,a,3])"]\n    "16759" [label="B is 1*1"]\n    "16760" [label="print(1)"]\n    "16761" [label="B is a*a"]\n    "16757" -> "16758"\n    "16757" -> "16759"\n    "16757" -> "16760"\n    "16757" -> "16761"\n}').
-
 :- endif.
 
 
@@ -1512,6 +1510,65 @@ test(print_sld_tree_no_single_goal, [true(ErrorInfoSubterm = ExpectedErrorInfoSu
   error_result_message_subterms(print_sld_tree_no_single_goal, 'jupyter:print_sld_tree(print(test)), print(exception).', 8, ErrorInfoSubterm, ExpectedErrorInfoSubterm).
 
 :- end_tests(print_sld_tree).
+
+
+:- if(swi).
+expected_error_info_subterm(incorrect_pred_spec, 0, 128, 'ERROR: Incorrect predicate specification: edge\nERROR: It needs to be of the form PredName/PredArity or Module:PredName/PredArity').
+expected_error_info_subterm(incorrect_index, 0, 77, 'ERROR: All indices need to be less or equal to the provided predicate arity 3').
+expected_error_info_subterm(print_transition_graph_no_single_goal, 0, 75, 'ERROR: jupyter:print_transition_graph/4 needs to be the only goal in a term').
+:- else.
+expected_error_info_subterm(incorrect_pred_spec, 0, 118, '! Incorrect predicate specification: edge\n! It needs to be of the form PredName/PredArity or Module:PredName/PredArity').
+expected_error_info_subterm(incorrect_index, 0, 72, '! All indices need to be less or equal to the provided predicate arity 3').
+expected_error_info_subterm(print_transition_graph_no_single_goal, 0, 70, '! jupyter:print_transition_graph/4 needs to be the only goal in a term').
+:- endif.
+
+
+define_transition_predicates :-
+  % Define the predicates edge/3 and two_way_edge/3
+  DefinitionRequest = 'edge(a, 71, b). edge(a, 151, c). edge(b, 80, c). edge(c, 99, d). edge(d, 75, b). edge(d, 140, a). two_way_edge(N1, L, N2) :- edge(N1, L, N2). two_way_edge(N1, L, N2) :- edge(N2, L, N1).',
+  ExpectedDefinitionResult = json(['1'=json([status=success,type=clause_definition,bindings=json([]),output='% Asserting clauses for user:edge/3\n',retracted_clauses=json([])]),
+                                   '2'=json([status=success,type=clause_definition,bindings=json([]),output='',retracted_clauses=json([])]),
+                                   '3'=json([status=success,type=clause_definition,bindings=json([]),output='',retracted_clauses=json([])]),
+                                   '4'=json([status=success,type=clause_definition,bindings=json([]),output='',retracted_clauses=json([])]),
+                                   '5'=json([status=success,type=clause_definition,bindings=json([]),output='',retracted_clauses=json([])]),
+                                   '6'=json([status=success,type=clause_definition,bindings=json([]),output='',retracted_clauses=json([])]),
+                                   '7'=json([status=success,type=clause_definition,bindings=json([]),output='% Asserting clauses for user:two_way_edge/3\n',retracted_clauses=json([])]),
+                                   '8'=json([status=success,type=clause_definition,bindings=json([]),output='',retracted_clauses=json([])])]),
+  send_success_call(DefinitionRequest, 0, DefinitionResult),
+  check_equality(DefinitionResult, ExpectedDefinitionResult).
+
+
+:- begin_tests(print_transition_graph, [setup((start_process, define_transition_predicates)), cleanup(release_process(true))]).
+
+test(incorrect_pred_spec, [true(ErrorInfoSubterm = ExpectedErrorInfoSubterm)]) :-
+  error_result_message_subterms(incorrect_pred_spec, 'jupyter:print_transition_graph(edge, 1, 3, 2).', 1, ErrorInfoSubterm, ExpectedErrorInfoSubterm).
+
+test(incorrect_from_index, [true(ErrorInfoSubterm = ExpectedErrorInfoSubterm)]) :-
+  error_result_message_subterms(incorrect_index, 'jupyter:print_transition_graph(user:edge/3, 4, 3, 2).', 2, ErrorInfoSubterm, ExpectedErrorInfoSubterm).
+
+test(incorrect_to_index, [true(ErrorInfoSubterm = ExpectedErrorInfoSubterm)]) :-
+  error_result_message_subterms(incorrect_index, 'jupyter:print_transition_graph(edge/3, 1, 5, 2).', 3, ErrorInfoSubterm, ExpectedErrorInfoSubterm).
+
+test(incorrect_label_index, [true(ErrorInfoSubterm = ExpectedErrorInfoSubterm)]) :-
+  error_result_message_subterms(incorrect_index, 'jupyter:print_transition_graph(edge/3, 1, 3, 7).', 4, ErrorInfoSubterm, ExpectedErrorInfoSubterm).
+
+test(incorrect_label_index, [true(ErrorInfoSubterm = ExpectedErrorInfoSubterm)]) :-
+  error_result_message_subterms(incorrect_index, 'jupyter:print_transition_graph(edge/3, 1, 3, 7).', 5, ErrorInfoSubterm, ExpectedErrorInfoSubterm).
+
+test(print_transition_graph_no_single_goal, [true(ErrorInfoSubterm = ExpectedErrorInfoSubterm)]) :-
+  error_result_message_subterms(print_transition_graph_no_single_goal, 'jupyter:print_transition_graph(edge/3, 1, 3, 2), print(exception).', 6, ErrorInfoSubterm, ExpectedErrorInfoSubterm).
+
+test(transition_graph, [true(Result = ExpectedResult)]) :-
+  Request = 'jupyter:print_transition_graph(edge/3, 1, 3, 2).',
+  ExpectedResult = [type=query,bindings=json([]),output='',print_transition_graph='digraph {\n    "a" -> "b" [label="71"]\n    "a" -> "c" [label="151"]\n    "b" -> "c" [label="80"]\n    "c" -> "d" [label="99"]\n    "d" -> "b" [label="75"]\n    "d" -> "a" [label="140"]\n}'],
+  send_call_with_single_success_result(Request, 7, Result).
+
+test(transition_graph_without_labels, [true(Result = ExpectedResult)]) :-
+  Request = 'jupyter:print_transition_graph(user:two_way_edge/3, 1, 3, 0).',
+  ExpectedResult = [type=query,bindings=json([]),output='',print_transition_graph='digraph {\n    "a" -> "b"\n    "a" -> "c"\n    "b" -> "c"\n    "c" -> "d"\n    "d" -> "b"\n    "d" -> "a"\n    "b" -> "a"\n    "c" -> "a"\n    "c" -> "b"\n    "d" -> "c"\n    "b" -> "d"\n    "a" -> "d"\n}'],
+  send_call_with_single_success_result(Request, 8, Result).
+
+:- end_tests(print_transition_graph).
 
 
 :- begin_tests(help, [setup((start_process)), cleanup(release_process(true))]).

@@ -120,3 +120,8 @@ juypter_message(invalid_table_values_lists_length) --> !,
   ['The values lists need to be of the same length'-[]], [nl].
 juypter_message(single_test_directive) --> !,
   ['The definition of a unit test cannot be split across multiple cells'-[]], [nl].
+juypter_message(print_transition_graph_pred_spec(PredSpec)) --> !,
+  ['Incorrect predicate specification: ~w'-[PredSpec]], [nl],
+  ['It needs to be of the form PredName/PredArity or Module:PredName/PredArity'-[]], [nl].
+juypter_message(print_transition_graph_indices(Arity)) --> !,
+  ['All indices need to be less or equal to the provided predicate arity ~w'-[Arity]], [nl].

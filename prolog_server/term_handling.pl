@@ -40,7 +40,7 @@ sicstus :- catch(current_prolog_flag(dialect, sicstus), _, fail).
 
 
 :- use_module(library(codesio), [write_term_to_codes/3, format_to_codes/3, read_term_from_codes/3]).
-:- use_module(library(lists), [delete/3, reverse/2]).
+:- use_module(library(lists), [delete/3, reverse/2, nth1/3]).
 :- use_module(logging, [log/1, log/2]).
 :- use_module(output, [call_with_output_to_file/3, call_query_with_output_to_file/7, redirect_output_to_file/0, exception_message/2, assert_query_start_time/0]).
 :- use_module(jsonrpc, [send_error_reply/3]).
@@ -343,6 +343,9 @@ handle_query_term_(jupyter:print_table(ValuesLists, VariableNames), _IsDirective
 % print_sld_tree
 handle_query_term_(jupyter:print_sld_tree(Goal), _IsDirective, _CallRequestId, _Stack, Bindings, _OriginalTermData, _LoopCont, continue) :- !,
   handle_print_sld_tree(Goal, Bindings).
+% print_transition_graph
+handle_query_term_(jupyter:print_transition_graph(PredSpec, FromIndex, ToIndex, LabelIndex), _IsDirective, _CallRequestId, _Stack, _Bindings, _OriginalTermData, _LoopCont, continue) :- !,
+  handle_print_transition_graph(PredSpec, FromIndex, ToIndex, LabelIndex).
 % run_tests
 handle_query_term_(run_tests, _IsDirective, CallRequestId, Stack, Bindings, _OriginalTermData, _LoopCont, Cont) :- !,
   handle_run_tests(run_tests, CallRequestId, Stack, Bindings, Cont).
@@ -918,7 +921,7 @@ handle_print_sld_tree(Goal, Bindings) :-
   output:call_query_with_output_to_file(term_handling:call_with_sld_data_collection(Goal, Exception, IsFailure), 0, Bindings, _OriginalTermData, Output, _ExceptionMessage, _IsFailure),
   retractall(collect_sld_data),
   % Compute the graph file content
-  graph_file_content(GraphFileContentAtom),
+  sld_graph_file_content(GraphFileContentAtom),
   % Assert the result response
   ( nonvar(Exception) -> % Exception
     !,
@@ -985,22 +988,22 @@ call_with_failure_handling(Goal, BreakpointConditions, IsFailure) :-
 :- endif.
 
 
-% graph_file_content(-GraphFileContentAtom)
+% sld_graph_file_content(-GraphFileContentAtom)
 %
 % GraphFileContentAtom is an atom representing the content of a graph file which would represent the SLD tree of the current execution.
 % Collects the data which was asserted as sld_data/3.
 % For each element (except the ones for the toplevel call and remove_breakpoints/1), an atom is created representing one of the lines of the file.
-graph_file_content(GraphFileContentAtom) :-
+sld_graph_file_content(GraphFileContentAtom) :-
   findall(GoalCodes-Id-ParentId, sld_data(GoalCodes, Id, ParentId), SldData),
   clean_sld_data(SldData, CleanSldData),
   % Compute nodes content
-  node_atoms(CleanSldData, 'A', [], Nodes),
+  sld_tree_node_atoms(CleanSldData, 'A', [], Nodes),
   % Compute edges content
   % The first element corresponds to a call from the toplevel
   % SldDataWithoutToplevelCalls contains all elements from CleanSldData which do not correspond to teplevel calls with the same ParentId
   CleanSldData = [_Goal-_CurrentId-ToplevelId|_],
   delete_all_occurrences(CleanSldData, _G-_Id-ToplevelId, SldDataWithoutToplevelCalls),
-  edge_atoms(SldDataWithoutToplevelCalls, Edges),
+  sld_tree_edge_atoms(SldDataWithoutToplevelCalls, Edges),
   % Build the file content atom
   % Append elements to the list with which the remaining file content is added
   append(Edges, ['}'], EdgesWithClosingBracket),
@@ -1057,15 +1060,15 @@ clean_sld_data(SldData, CleanSldData) :-
 :- endif.
 
 
-% node_atoms(+SldData, +CurrentReplacementAtom +VariableNameReplacements, -NodeAtoms)
+% sld_tree_node_atoms(+SldData, +CurrentReplacementAtom +VariableNameReplacements, -NodeAtoms)
 %
 % SldData is a list with elements of the form GoalCodes-Current-Parent.
 % For each of the elements, NodeAtoms contains an atom of the following form: '"Current" [label="Goal"]'
 % All variable names, which are of the form _12345 are replaced by names starting with 'A'.
 % CurrentReplacementAtom is the atom the next variable name is to be replaced with.
 % In order to keep the renaming consistent for all terms, VariableNameReplacements is a list with VarName=NameReplacement pairs for name replacements which were made for the previous terms.
-node_atoms([], _CurrentReplacementAtom, _VariableNameReplacements, []) :- !.
-node_atoms([GoalCodes-Current-_Parent|SldData], CurrentReplacementAtom, VariableNameReplacements, [Node|Nodes]) :-
+sld_tree_node_atoms([], _CurrentReplacementAtom, _VariableNameReplacements, []) :- !.
+sld_tree_node_atoms([GoalCodes-Current-_Parent|SldData], CurrentReplacementAtom, VariableNameReplacements, [Node|Nodes]) :-
   % Read the goal term from the codes with the option variable_names/1 so that variable names can be replaced consistently
   append(GoalCodes, [46], GoalCodesWithFullStop),
   read_term_from_codes(GoalCodesWithFullStop, GoalTerm, [variable_names(VariableNames)]),
@@ -1074,7 +1077,7 @@ node_atoms([GoalCodes-Current-_Parent|SldData], CurrentReplacementAtom, Variable
   % Create the atom
   format_to_codes('    \"~w\" [label=\"~w\"]~n', [Current, GoalTerm], NodeCodes),
   atom_codes(Node, NodeCodes),
-  node_atoms(SldData, NextReplacementAtom, NewVariableNameReplacements, Nodes).
+  sld_tree_node_atoms(SldData, NextReplacementAtom, NewVariableNameReplacements, Nodes).
 
 
 % replace_variable_names(+VariableNames, +CurrentReplacementAtom, +VariableNameReplacements, -NextReplacementAtom, -NewVariableNameReplacements)
@@ -1130,15 +1133,15 @@ delete_all_occurrences([Element|List], DeleteElement, [Element|NewList]) :-
   delete_all_occurrences(List, DeleteElement, NewList).
 
 
-% edge_atoms(+SldData, -Edges)
+% sld_tree_edge_atoms(+SldData, -Edges)
 %
 % SldData is a list with elements of the form GoalCodes-Current-Parent.
 % For each of these elements, Edges contains an atom of the following form: '    "Parent" -> "Current"~n'
-edge_atoms([], []) :- !.
-edge_atoms([_GoalCodes-Current-Parent|SldData], [EdgeAtom|Edges]) :-
+sld_tree_edge_atoms([], []) :- !.
+sld_tree_edge_atoms([_GoalCodes-Current-Parent|SldData], [EdgeAtom|Edges]) :-
   format_to_codes('    \"~w\" -> \"~w\"~n', [Parent, Current], EdgeCodes),
   atom_codes(EdgeAtom, EdgeCodes),
-  edge_atoms(SldData, Edges).
+  sld_tree_edge_atoms(SldData, Edges).
 
 
 % atom_concat(+AtomList, -ResultAtom)
@@ -1157,7 +1160,87 @@ atom_concat_([Atom|Atoms], AtomSoFar, ResultAtom) :-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% TODO transitions
+% Print Transition Graph
+
+% Create content for a file representing a graph of transitions between the clauses of a given predicate.
+% In addition to a predicate specification, indices need to be provided for the arguments which are used for the edges and their optional labels.
+% The predicate results are used to create lines for the edges of one of the following forms:
+% - '    "From" -> "To" [label="Label"]~n'
+% - '    "From" -> "To"~n'
+
+
+% handle_print_transition_graph(+PredSpec, +FromIndex, +ToIndex, +LabelIndex)
+%
+% PredSpec needs to be a predicate specification of the form Module:PredName/PredArity or PredName/PredArity.
+% FromIndex, ToIndex, and LabelIndex need to be less or equal to PredArity.
+% FromIndex and ToIndex point to predicate arguments used as nodes.
+% LabelIndex points to the argument providing a label for an edge.
+% If LabelIndex=0, the edges are not labelled.
+handle_print_transition_graph(PredSpec, FromIndex, ToIndex, LabelIndex) :-
+  % Check that the predicate specification and indices are correct
+  module_name_expanded_pred_spec(PredSpec, Module:PredName/PredArity),
+  check_indices(PredArity, FromIndex, ToIndex, LabelIndex),
+  !,
+  length(ArgList, PredArity),
+  PredTerm =.. [PredName|ArgList],
+  % Compute all possible transitions
+  findall(ArgList, Module:PredTerm, Results),
+  % Compute the graph file content
+  transition_graph_edge_atoms(Results, FromIndex, ToIndex, LabelIndex, EdgeAtoms),
+  append(EdgeAtoms, ['}'], EdgesWithClosingBracket),
+  atom_concat(['digraph {\n'|EdgesWithClosingBracket], GraphFileContentAtom),
+  % Assert the result response
+  assert_success_response(query, [], '', [print_transition_graph=GraphFileContentAtom]).
+handle_print_transition_graph(_PredSpec, _FromIndex, _ToIndex, _LabelIndex).
+  % If some requirements are not fulfilled, the first clause asserts and error response and fails
+
+
+% module_name_expanded_pred_spec(+PredSpec, -MPredSpec)
+module_name_expanded_pred_spec(Module:PredName/PredArity, Module:PredName/PredArity) :- !.
+module_name_expanded_pred_spec(PredName/PredArity, user:PredName/PredArity) :- !.
+module_name_expanded_pred_spec(PredSpec, _) :-
+  output:exception_message(jupyter(print_transition_graph_pred_spec(PredSpec)), Message),
+  assert_error_response(exception, Message, '', []),
+  fail.
+
+
+% check_indices(+PredArity, +FromIndex, +ToIndex, +LabelIndex)
+check_indices(PredArity, FromIndex, ToIndex, LabelIndex) :-
+  % All indices need to be less or equal to the predicate arity
+  FromIndex =< PredArity,
+  ToIndex =< PredArity,
+  LabelIndex =< PredArity,
+  !.
+check_indices(PredArity, _FromIndex, _ToIndex, _LabelIndex) :-
+  output:exception_message(jupyter(print_transition_graph_indices(PredArity)), Message),
+  assert_error_response(exception, Message, '', []),
+  fail.
+
+
+% transition_graph_edge_atoms(+Results, +FromIndex, +ToIndex, +LabelIndex, -EdgeAtoms)
+%
+% Results is a list of lists where each of those lists corresponds to the arguments of a clause.
+% FromIndex, ToIndex, and LabelIndex are pointers to these arguments.
+% For each of the lists, the list EdgeAtoms contains an atom.
+% If LabelIndex=0, EdgeAtoms contains atoms of the following form: '    "From" -> "To"~n'
+% Otherwise, the atoms are of the following form:                  '    "From" -> "To" [label="Label"]~n'
+transition_graph_edge_atoms([], _FromIndex, _ToIndex, _LabelIndex, []) :- !.
+transition_graph_edge_atoms([Result|Results], FromIndex, ToIndex, 0, [EdgeAtom|EdgeAtoms]) :-
+  % Without a label
+  !,
+  nth1(FromIndex, Result, From),
+  nth1(ToIndex, Result, To),
+  format_to_codes('    \"~w\" -> \"~w\"~n', [From, To], EdgeCodes),
+  atom_codes(EdgeAtom, EdgeCodes),
+  transition_graph_edge_atoms(Results, FromIndex, ToIndex, 0, EdgeAtoms).
+transition_graph_edge_atoms([Result|Results], FromIndex, ToIndex, LabelIndex, [EdgeAtom|EdgeAtoms]) :-
+  nth1(FromIndex, Result, From),
+  nth1(ToIndex, Result, To),
+  nth1(LabelIndex, Result, Label),
+  format_to_codes('    \"~w\" -> \"~w\" [label=\"~w\"]~n', [From, To, Label], EdgeCodes),
+  atom_codes(EdgeAtom, EdgeCodes),
+  transition_graph_edge_atoms(Results, FromIndex, ToIndex, LabelIndex, EdgeAtoms).
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
