@@ -1,6 +1,8 @@
 
 # SICStus Prolog Jupyter Kernel
 
+**Note:** Now there is the [Prolog Jupyter Kernel](https://github.com/anbre/prolog-jupyter-kernel) which can be configured to be used with SWI- or SICStus Prolog (or any other Prolog implementation for which a JSON-RPC 2.0 server can be written).
+
 A [Jupyter](https://jupyter.org/) kernel for [SICStus Prolog](https://sicstus.sics.se/) based on the [IPython kernel](https://github.com/ipython/ipykernel).
 
 Also see the [Jupyter kernel for SWI-Prolog](https://github.com/anbre/swi-prolog-jupyter-kernel) and the [JupyterLab Prolog CodeMirror Extension](https://github.com/anbre/jupyterlab-prolog-codemirror-extension) for syntax highlighting of Prolog code in JupyterLab.
